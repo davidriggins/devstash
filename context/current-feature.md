@@ -20,4 +20,7 @@ Not Started
 
 <!-- Keep this updated. Earliest to latest -->
 
-- Project setup and boilerplate cleanup
+- Initial commit from Create Next App
+- Clean up for baseline application
+- Lesson 23: Add project context and CLAUDE.md
+- Lesson 25: AI workflow & current feature file
