@@ -1,20 +1,26 @@
 import Link from "next/link";
 import { FolderPlus, Layers, Plus, Search } from "lucide-react";
 
+import { SidebarToggle } from "@/components/layout/SidebarToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export function Topbar() {
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-sidebar px-4">
+      {/* Toggle leads on mobile; the logo reclaims the far left from `md` up */}
+      <SidebarToggle />
+
       <Link
         href="/dashboard"
-        className="flex shrink-0 items-center gap-3 text-sidebar-foreground md:w-60"
+        className="flex shrink-0 items-center gap-3 text-sidebar-foreground md:order-first md:w-60"
       >
         <span className="flex size-9 items-center justify-center rounded-xl bg-indigo-500 text-white">
           <Layers className="size-5" />
         </span>
-        <span className="text-xl font-semibold tracking-tight">DevStash</span>
+        <span className="hidden text-xl font-semibold tracking-tight sm:inline">
+          DevStash
+        </span>
       </Link>
 
       <div className="relative w-full max-w-lg">
