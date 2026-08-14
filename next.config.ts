@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Required by Prisma Compute — Next.js deploys fail without it
+  output: "standalone",
 };
 
 export default nextConfig;
