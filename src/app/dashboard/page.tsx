@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   description: "Your developer knowledge hub",
 };
 
+// The dashboard reads live database state, so it must not be prerendered
+export const dynamic = "force-dynamic";
+
 const RECENT_ITEMS_LIMIT = 10;
 
 const pinnedItems = mockItems.filter((item) => item.isPinned);

@@ -23,6 +23,11 @@ export type ItemTypeName = keyof typeof ITEM_TYPE_ICONS;
 
 export const ITEM_TYPE_NAMES = Object.keys(ITEM_TYPE_ICONS) as ItemTypeName[];
 
+/** Narrows a type name read from the database to one we have UI constants for */
+export function isItemTypeName(name: string): name is ItemTypeName {
+  return name in ITEM_TYPE_ICONS;
+}
+
 /** Tailwind text colors from the `--color-*` theme vars in globals.css */
 export const ITEM_TYPE_TEXT_CLASSES = {
   snippet: "text-snippet",
