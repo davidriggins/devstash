@@ -1,10 +1,41 @@
 import type { Metadata } from "next";
+import { Clock, Pin } from "lucide-react";
+
+import { CollectionsSection } from "@/components/dashboard/CollectionsSection";
+import { ItemsSection } from "@/components/dashboard/ItemsSection";
+import { StatsCards } from "@/components/dashboard/StatsCards";
+import { mockItems } from "@/lib/mock-data";
 
 export const metadata: Metadata = {
   title: "Dashboard | DevStash",
   description: "Your developer knowledge hub",
 };
 
+const RECENT_ITEMS_LIMIT = 10;
+
+const pinnedItems = mockItems.filter((item) => item.isPinned);
+
+const recentItems = [...mockItems]
+  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  .slice(0, RECENT_ITEMS_LIMIT);
+
 export default function DashboardPage() {
-  return <h2 className="text-lg font-semibold">Main</h2>;
+  return (
+    <div className="space-y-8">
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+        <p className="mt-1 text-muted-foreground">
+          Your developer knowledge hub
+        </p>
+      </header>
+
+      <StatsCards />
+
+      <CollectionsSection />
+
+      <ItemsSection title="Pinned" icon={Pin} items={pinnedItems} />
+
+      <ItemsSection title="Recent Items" icon={Clock} items={recentItems} />
+    </div>
+  );
 }
