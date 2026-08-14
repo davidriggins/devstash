@@ -5,7 +5,7 @@ import {
   type ItemTypeName,
 } from "@/lib/constants/item-types";
 import { prisma } from "@/lib/prisma";
-import type { DashboardCollection } from "@/types/dashboard";
+import type { DashboardCollection, SidebarCollection } from "@/types/dashboard";
 
 /**
  * Distinct types held by a collection, most-used first. Ties fall back to the
@@ -68,6 +68,46 @@ export async function getRecentCollections(
       dominantType: types[0] ?? null,
     };
   });
+}
+
+/**
+ * The sidebar's collection lists: every favorite, plus the most recently
+ * updated collections that are not already listed as favorites.
+ */
+export async function getSidebarCollections(recentLimit: number): Promise<{
+  favorites: SidebarCollection[];
+  recents: SidebarCollection[];
+}> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return { favorites: [], recents: [] };
+  }
+
+  const collections = await prisma.collection.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      isFavorite: true,
+      items: {
+        select: { item: { select: { itemType: { select: { name: true } } } } },
+      },
+    },
+  });
+
+  const rows = collections.map(({ items, ...collection }) => ({
+    ...collection,
+    itemCount: items.length,
+    dominantType:
+      rankTypes(items.map(({ item }) => item.itemType.name))[0] ?? null,
+  }));
+
+  return {
+    favorites: rows.filter((row) => row.isFavorite),
+    recents: rows.filter((row) => !row.isFavorite).slice(0, recentLimit),
+  };
 }
 
 export async function getCollectionStats() {

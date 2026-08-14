@@ -1,7 +1,7 @@
 import { getCurrentUserId } from "@/lib/db/user";
-import { isItemTypeName } from "@/lib/constants/item-types";
+import { ITEM_TYPE_NAMES, isItemTypeName } from "@/lib/constants/item-types";
 import { prisma } from "@/lib/prisma";
-import type { DashboardItem } from "@/types/dashboard";
+import type { DashboardItem, SidebarItemType } from "@/types/dashboard";
 
 const ITEM_SELECT = {
   id: true,
@@ -72,6 +72,44 @@ export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
   });
 
   return items.map(toDashboardItem);
+}
+
+/**
+ * The system item types in canonical order, each with the current user's item
+ * count. Types the UI has no constants for are skipped.
+ */
+export async function getItemTypeCounts(): Promise<SidebarItemType[]> {
+  const userId = await getCurrentUserId();
+
+  const itemTypes = await prisma.itemType.findMany({
+    where: { isSystem: true },
+    select: { id: true, name: true },
+  });
+
+  const countByTypeId = new Map<string, number>();
+
+  if (userId) {
+    const counts = await prisma.item.groupBy({
+      by: ["itemTypeId"],
+      where: { userId },
+      _count: { _all: true },
+    });
+
+    for (const { itemTypeId, _count } of counts) {
+      countByTypeId.set(itemTypeId, _count._all);
+    }
+  }
+
+  return itemTypes
+    .flatMap(({ id, name }) =>
+      isItemTypeName(name)
+        ? [{ id, name, count: countByTypeId.get(id) ?? 0 }]
+        : []
+    )
+    .sort(
+      (a, b) =>
+        ITEM_TYPE_NAMES.indexOf(a.name) - ITEM_TYPE_NAMES.indexOf(b.name)
+    );
 }
 
 export async function getItemStats() {

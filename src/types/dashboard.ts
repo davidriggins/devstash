@@ -12,6 +12,24 @@ export interface DashboardItem {
   tags: string[];
 }
 
+/** A sidebar type row's data, shaped by `getItemTypeCounts` */
+export interface SidebarItemType {
+  id: string;
+  name: ItemTypeName;
+  /** How many items of this type the current user has */
+  count: number;
+}
+
+/** A sidebar collection row's data, shaped by `getSidebarCollections` */
+export interface SidebarCollection {
+  id: string;
+  name: string;
+  isFavorite: boolean;
+  itemCount: number;
+  /** Most-used type, driving the row's dot; null when the collection is empty */
+  dominantType: ItemTypeName | null;
+}
+
 /** A collection card's data, shaped by `getRecentCollections` */
 export interface DashboardCollection {
   id: string;

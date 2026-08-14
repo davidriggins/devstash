@@ -3,7 +3,13 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronsLeft, ChevronsRight, Star } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Star,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -11,24 +17,13 @@ import { useSidebar } from "@/components/layout/SidebarProvider";
 import { RAIL_CENTER, RAIL_HIDDEN } from "@/components/layout/sidebar-styles";
 import {
   getItemTypeHref,
+  ITEM_TYPE_DOT_CLASSES,
   ITEM_TYPE_ICONS,
   ITEM_TYPE_LABELS,
   ITEM_TYPE_TEXT_CLASSES,
-  type ItemTypeName,
 } from "@/lib/constants/item-types";
-import { mockCollections, mockItemTypeCounts, mockItemTypes } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
-
-const RECENT_COLLECTIONS_LIMIT = 5;
-
-const favoriteCollections = mockCollections.filter(
-  (collection) => collection.isFavorite
-);
-
-const recentCollections = mockCollections
-  .filter((collection) => !collection.isFavorite)
-  .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-  .slice(0, RECENT_COLLECTIONS_LIMIT);
+import type { SidebarCollection, SidebarItemType } from "@/types/dashboard";
 
 const rowClasses =
   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
@@ -117,7 +112,32 @@ function CollectionLink({
   );
 }
 
-export function SidebarNav() {
+/** Colored dot standing in for a collection's most-used item type */
+function CollectionDot({ type }: { type: SidebarCollection["dominantType"] }) {
+  return (
+    <span className="flex size-4 shrink-0 items-center justify-center">
+      <span
+        className={cn(
+          "size-2 rounded-full",
+          // Empty collections have no type to borrow a color from
+          type ? ITEM_TYPE_DOT_CLASSES[type] : "bg-muted-foreground/40"
+        )}
+      />
+    </span>
+  );
+}
+
+interface SidebarNavProps {
+  itemTypes: SidebarItemType[];
+  favoriteCollections: SidebarCollection[];
+  recentCollections: SidebarCollection[];
+}
+
+export function SidebarNav({
+  itemTypes,
+  favoriteCollections,
+  recentCollections,
+}: SidebarNavProps) {
   const pathname = usePathname();
   const { isRail, toggleRail, closeMobile } = useSidebar();
 
@@ -147,8 +167,7 @@ export function SidebarNav() {
       <Separator />
 
       <SidebarGroup label="Types">
-        {mockItemTypes.map((itemType) => {
-          const name = itemType.name as ItemTypeName;
+        {itemTypes.map(({ id, name, count }) => {
           const Icon = ITEM_TYPE_ICONS[name];
           const label = ITEM_TYPE_LABELS[name];
           const href = getItemTypeHref(name);
@@ -156,7 +175,7 @@ export function SidebarNav() {
 
           return (
             <Link
-              key={itemType.id}
+              key={id}
               href={href}
               onClick={closeMobile}
               aria-current={isActive ? "page" : undefined}
@@ -173,7 +192,7 @@ export function SidebarNav() {
                 {label}
               </span>
               <span className={cn("text-xs text-muted-foreground", RAIL_HIDDEN)}>
-                {mockItemTypeCounts[name]}
+                {count}
               </span>
             </Link>
           );
@@ -213,8 +232,7 @@ export function SidebarNav() {
                   name={collection.name}
                   isActive={pathname === `/collections/${collection.id}`}
                   onNavigate={closeMobile}
-                  // Spacer keeps the label aligned with the starred favorites above
-                  leading={<span aria-hidden className="size-4 shrink-0" />}
+                  leading={<CollectionDot type={collection.dominantType} />}
                   trailing={
                     <span className="text-xs text-muted-foreground">
                       {collection.itemCount}
@@ -224,6 +242,21 @@ export function SidebarNav() {
               ))}
             </>
           )}
+
+          <Link
+            href="/collections"
+            onClick={closeMobile}
+            aria-current={pathname === "/collections" ? "page" : undefined}
+            className={cn(
+              rowClasses,
+              "mt-1 text-muted-foreground hover:text-sidebar-accent-foreground"
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">
+              View all collections
+            </span>
+            <ChevronRight className="size-4 shrink-0" />
+          </Link>
         </SidebarGroup>
       </div>
     </nav>
