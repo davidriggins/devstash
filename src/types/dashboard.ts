@@ -1,11 +1,16 @@
 import type { ItemTypeName } from "@/lib/constants/item-types";
-import { mockItems } from "@/lib/mock-data";
 
-/**
- * Derived from the mock data until items move to the database, so the
- * dashboard components stay in step with whatever the seed data actually holds.
- */
-export type DashboardItem = (typeof mockItems)[number];
+/** An item row's data, shaped by the functions in `lib/db/items.ts` */
+export interface DashboardItem {
+  id: string;
+  title: string;
+  description: string | null;
+  isFavorite: boolean;
+  isPinned: boolean;
+  createdAt: Date;
+  type: ItemTypeName;
+  tags: string[];
+}
 
 /** A collection card's data, shaped by `getRecentCollections` */
 export interface DashboardCollection {

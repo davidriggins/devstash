@@ -4,7 +4,7 @@ import { Clock, Pin } from "lucide-react";
 import { CollectionsSection } from "@/components/dashboard/CollectionsSection";
 import { ItemsSection } from "@/components/dashboard/ItemsSection";
 import { StatsCards } from "@/components/dashboard/StatsCards";
-import { mockItems } from "@/lib/mock-data";
+import { getPinnedItems, getRecentItems } from "@/lib/db/items";
 
 export const metadata: Metadata = {
   title: "Dashboard | DevStash",
@@ -16,13 +16,12 @@ export const dynamic = "force-dynamic";
 
 const RECENT_ITEMS_LIMIT = 10;
 
-const pinnedItems = mockItems.filter((item) => item.isPinned);
+export default async function DashboardPage() {
+  const [pinnedItems, recentItems] = await Promise.all([
+    getPinnedItems(),
+    getRecentItems(RECENT_ITEMS_LIMIT),
+  ]);
 
-const recentItems = [...mockItems]
-  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-  .slice(0, RECENT_ITEMS_LIMIT);
-
-export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <header>

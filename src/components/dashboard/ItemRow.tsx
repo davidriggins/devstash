@@ -6,15 +6,9 @@ import {
   ITEM_TYPE_BG_CLASSES,
   ITEM_TYPE_ICONS,
   ITEM_TYPE_TEXT_CLASSES,
-  type ItemTypeName,
 } from "@/lib/constants/item-types";
-import { mockItemTypes } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import type { DashboardItem } from "@/types/dashboard";
-
-const typeNameById = new Map(
-  mockItemTypes.map((itemType) => [itemType.id, itemType.name as ItemTypeName])
-);
 
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -22,7 +16,7 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export function ItemRow({ item }: { item: DashboardItem }) {
-  const typeName = typeNameById.get(item.itemTypeId) ?? "note";
+  const typeName = item.type;
   const Icon = ITEM_TYPE_ICONS[typeName];
 
   return (
