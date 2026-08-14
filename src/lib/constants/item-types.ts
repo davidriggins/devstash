@@ -21,6 +21,8 @@ export const ITEM_TYPE_ICONS = {
 
 export type ItemTypeName = keyof typeof ITEM_TYPE_ICONS;
 
+export const ITEM_TYPE_NAMES = Object.keys(ITEM_TYPE_ICONS) as ItemTypeName[];
+
 /** Tailwind text colors from the `--color-*` theme vars in globals.css */
 export const ITEM_TYPE_TEXT_CLASSES = {
   snippet: "text-snippet",
@@ -30,6 +32,28 @@ export const ITEM_TYPE_TEXT_CLASSES = {
   file: "text-file",
   image: "text-image",
   link: "text-link",
+} as const satisfies Record<ItemTypeName, string>;
+
+/** Tinted backgrounds for the icon tiles on item rows */
+export const ITEM_TYPE_BG_CLASSES = {
+  snippet: "bg-snippet/10",
+  prompt: "bg-prompt/10",
+  command: "bg-command/10",
+  note: "bg-note/10",
+  file: "bg-file/10",
+  image: "bg-image/10",
+  link: "bg-link/10",
+} as const satisfies Record<ItemTypeName, string>;
+
+/** Left accent stripe on cards and rows */
+export const ITEM_TYPE_ACCENT_CLASSES = {
+  snippet: "border-l-snippet",
+  prompt: "border-l-prompt",
+  command: "border-l-command",
+  note: "border-l-note",
+  file: "border-l-file",
+  image: "border-l-image",
+  link: "border-l-link",
 } as const satisfies Record<ItemTypeName, string>;
 
 export const ITEM_TYPE_LABELS = {
