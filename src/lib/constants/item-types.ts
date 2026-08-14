@@ -50,6 +50,17 @@ export const ITEM_TYPE_BG_CLASSES = {
   link: "bg-link/10",
 } as const satisfies Record<ItemTypeName, string>;
 
+/** Solid fills for the small type dots in the sidebar */
+export const ITEM_TYPE_DOT_CLASSES = {
+  snippet: "bg-snippet",
+  prompt: "bg-prompt",
+  command: "bg-command",
+  note: "bg-note",
+  file: "bg-file",
+  image: "bg-image",
+  link: "bg-link",
+} as const satisfies Record<ItemTypeName, string>;
+
 /** Left accent stripe on cards and rows */
 export const ITEM_TYPE_ACCENT_CLASSES = {
   snippet: "border-l-snippet",

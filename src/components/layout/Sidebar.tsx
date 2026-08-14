@@ -4,8 +4,19 @@ import { SidebarNav } from "@/components/layout/SidebarNav";
 import { useSidebar } from "@/components/layout/SidebarProvider";
 import { SidebarUser } from "@/components/layout/SidebarUser";
 import { cn } from "@/lib/utils";
+import type { SidebarCollection, SidebarItemType } from "@/types/dashboard";
 
-export function Sidebar() {
+interface SidebarProps {
+  itemTypes: SidebarItemType[];
+  favoriteCollections: SidebarCollection[];
+  recentCollections: SidebarCollection[];
+}
+
+export function Sidebar({
+  itemTypes,
+  favoriteCollections,
+  recentCollections,
+}: SidebarProps) {
   const { isMobile, isOpen, isMobileOpen, isRail, closeMobile } = useSidebar();
   const isVisible = isMobile ? isMobileOpen : isOpen;
 
@@ -37,7 +48,11 @@ export function Sidebar() {
             isRail && "md:w-16"
           )}
         >
-          <SidebarNav />
+          <SidebarNav
+            itemTypes={itemTypes}
+            favoriteCollections={favoriteCollections}
+            recentCollections={recentCollections}
+          />
           <SidebarUser />
         </div>
       </aside>
