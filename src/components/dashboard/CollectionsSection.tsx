@@ -5,41 +5,28 @@ import { SectionHeading } from "@/components/dashboard/SectionHeading";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ITEM_TYPE_ACCENT_CLASSES,
-  ITEM_TYPE_NAMES,
+  ITEM_TYPE_ICONS,
+  ITEM_TYPE_LABELS,
+  ITEM_TYPE_TEXT_CLASSES,
 } from "@/lib/constants/item-types";
-import { mockCollections } from "@/lib/mock-data";
+import { getRecentCollections } from "@/lib/db/collections";
 import { cn } from "@/lib/utils";
 import type { DashboardCollection } from "@/types/dashboard";
 
 const COLLECTIONS_LIMIT = 6;
 
-const recentCollections = [...mockCollections]
-  .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-  .slice(0, COLLECTIONS_LIMIT);
+function CollectionCard({ collection }: { collection: DashboardCollection }) {
+  // The stripe reflects the collection's most-used type; empty ones stay neutral
+  const accentClass = collection.dominantType
+    ? ITEM_TYPE_ACCENT_CLASSES[collection.dominantType]
+    : "border-l-border";
 
-/**
- * Mock collections carry no type relationship, so the stripe is decorative:
- * a stable colour per position rather than a claim about the contents.
- */
-function accentClass(index: number) {
-  return ITEM_TYPE_ACCENT_CLASSES[
-    ITEM_TYPE_NAMES[index % ITEM_TYPE_NAMES.length]
-  ];
-}
-
-function CollectionCard({
-  collection,
-  index,
-}: {
-  collection: DashboardCollection;
-  index: number;
-}) {
   return (
     <Link href={`/collections/${collection.id}`} className="group/collection">
       <Card
         className={cn(
           "h-full border-l-4 transition-colors group-hover/collection:bg-muted/40",
-          accentClass(index)
+          accentClass
         )}
       >
         <CardHeader>
@@ -50,20 +37,42 @@ function CollectionCard({
             )}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            {collection.itemCount} items
+            {collection.itemCount}{" "}
+            {collection.itemCount === 1 ? "item" : "items"}
           </p>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            {collection.description}
-          </p>
+          {collection.description && (
+            <p className="text-sm text-muted-foreground">
+              {collection.description}
+            </p>
+          )}
+
+          {collection.types.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {collection.types.map((type) => {
+                const Icon = ITEM_TYPE_ICONS[type];
+
+                return (
+                  <Icon
+                    key={type}
+                    role="img"
+                    aria-label={ITEM_TYPE_LABELS[type]}
+                    className={cn("size-4", ITEM_TYPE_TEXT_CLASSES[type])}
+                  />
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </Link>
   );
 }
 
-export function CollectionsSection() {
+export async function CollectionsSection() {
+  const collections = await getRecentCollections(COLLECTIONS_LIMIT);
+
   return (
     <section>
       <SectionHeading
@@ -77,15 +86,17 @@ export function CollectionsSection() {
           </Link>
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {recentCollections.map((collection, index) => (
-          <CollectionCard
-            key={collection.id}
-            collection={collection}
-            index={index}
-          />
-        ))}
-      </div>
+      {collections.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No collections yet. Create one to start organising your items.
+        </p>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {collections.map((collection) => (
+            <CollectionCard key={collection.id} collection={collection} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

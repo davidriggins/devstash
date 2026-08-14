@@ -1,10 +1,10 @@
 # Current Feature
 
-<!-- Feature Name -->
+Dashboard Collections - Real Data
 
 ## Status
 
-<!-- Not Started|In Progress|Completed -->
+Completed
 
 ## Goals
 
@@ -28,3 +28,4 @@
 - Dashboard UI Phase 3: main area with stats cards, recent collections grid, pinned items and the 10 most recent items
 - Database: Prisma 7 with Neon Postgres, initial schema and migration, driver adapter, system item type seed, and a db:test script
 - Seed data: demo user with hashed password, 5 collections and 18 tagged items, plus a db:test that prints the data and asserts its consistency
+- Dashboard collections: real collection data from Neon via `src/lib/db/collections.ts`, card accent from the most-used type, icon row for every type in the collection, and a dynamically rendered dashboard route
