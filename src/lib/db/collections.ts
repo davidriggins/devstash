@@ -69,3 +69,18 @@ export async function getRecentCollections(
     };
   });
 }
+
+export async function getCollectionStats() {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return { total: 0, favorites: 0 };
+  }
+
+  const [total, favorites] = await Promise.all([
+    prisma.collection.count({ where: { userId } }),
+    prisma.collection.count({ where: { userId, isFavorite: true } }),
+  ]);
+
+  return { total, favorites };
+}

@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -7,11 +9,12 @@ import { prisma } from "@/lib/prisma";
  */
 const DEMO_USER_EMAIL = "demo@devstash.io";
 
-export async function getCurrentUserId(): Promise<string | null> {
+// Cached so the several data functions a page calls share one lookup per request
+export const getCurrentUserId = cache(async (): Promise<string | null> => {
   const user = await prisma.user.findUnique({
     where: { email: DEMO_USER_EMAIL },
     select: { id: true },
   });
 
   return user?.id ?? null;
-}
+});
