@@ -1,24 +1,16 @@
-# Current Feature: Add Pro Badge to Sidebar
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- Show a `PRO` badge next to the Files item type in the sidebar
-- Show a `PRO` badge next to the Images item type in the sidebar
-- Use the shadcn/ui `Badge` component for both
-- Badge label is uppercase `PRO`
-- Styling is clean and subtle so it does not compete with the type label or item count
+<!-- Goals & requirements -->
 
 ## Notes
 
-- Spec: `context/features/add-pro-badge-sidebar.md`
-- Files and Images are the two Pro-only system types per the project overview; the badge is a visual marker only, no gating behaviour in this feature
-- Sidebar type links are rendered in the sidebar nav component, which already renders each type's icon, label and item count — the badge slots into that row
-- Sidebar collapses to an icon rail on desktop and becomes a drawer on tablet/mobile; check the badge does not break the collapsed rail
-- `Badge` may not be installed yet — add it via `npx shadcn@latest add badge` if missing
+<!-- Any extra notes -->
 
 ## History
 
@@ -37,3 +29,4 @@ In Progress
 - Dashboard collections: real collection data from Neon via `src/lib/db/collections.ts`, card accent from the most-used type, icon row for every type in the collection, and a dynamically rendered dashboard route
 - Dashboard items: pinned and recent items from Neon via `src/lib/db/items.ts`, real stats card counts, item row icon and border from the item's own type, and a request-cached current user lookup
 - Stats & sidebar: system item types with real per-type counts via `getItemTypeCounts`, favorite and recent collections via `getSidebarCollections`, a colored dot for each recent collection's most-used type, a "View all collections" link, and the dashboard layout fetching both for the sidebar
+- Pro badge: `PRO_ITEM_TYPES` and `isProItemType` in the item type constants, and a subtle outline `Badge` on the Files and Images rows in the sidebar between the label and the count, hidden in collapsed rail mode; visual marker only, no route gating yet
