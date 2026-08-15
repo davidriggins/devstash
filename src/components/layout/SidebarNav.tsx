@@ -11,6 +11,7 @@ import {
   Star,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useSidebar } from "@/components/layout/SidebarProvider";
@@ -21,6 +22,7 @@ import {
   ITEM_TYPE_ICONS,
   ITEM_TYPE_LABELS,
   ITEM_TYPE_TEXT_CLASSES,
+  isProItemType,
 } from "@/lib/constants/item-types";
 import { cn } from "@/lib/utils";
 import type { SidebarCollection, SidebarItemType } from "@/types/dashboard";
@@ -191,6 +193,17 @@ export function SidebarNav({
               <span className={cn("min-w-0 flex-1 truncate", RAIL_HIDDEN)}>
                 {label}
               </span>
+              {isProItemType(name) && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "h-4 px-1.5 text-[10px] tracking-wide text-muted-foreground",
+                    RAIL_HIDDEN
+                  )}
+                >
+                  PRO
+                </Badge>
+              )}
               <span className={cn("text-xs text-muted-foreground", RAIL_HIDDEN)}>
                 {count}
               </span>

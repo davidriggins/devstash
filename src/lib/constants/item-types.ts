@@ -28,6 +28,13 @@ export function isItemTypeName(name: string): name is ItemTypeName {
   return name in ITEM_TYPE_ICONS;
 }
 
+/** Types only available on the Pro plan */
+export const PRO_ITEM_TYPES = ["file", "image"] as const satisfies ItemTypeName[];
+
+export function isProItemType(name: ItemTypeName) {
+  return (PRO_ITEM_TYPES as readonly ItemTypeName[]).includes(name);
+}
+
 /** Tailwind text colors from the `--color-*` theme vars in globals.css */
 export const ITEM_TYPE_TEXT_CLASSES = {
   snippet: "text-snippet",
