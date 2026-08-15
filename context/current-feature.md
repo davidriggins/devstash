@@ -1,16 +1,35 @@
-# Current Feature
+# Current Feature: Fix Sidebar Group Collapse on Mobile
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+Collapsing the sidebar to the icon rail on desktop and then narrowing to a mobile
+viewport leaves the drawer's "Types" and "Collections" headers unable to collapse —
+the chevron rotates but the rows stay on screen.
+
+- `SidebarGroup` in `src/components/layout/SidebarNav.tsx` renders its children when
+  `isExpanded || isRail`. Rail mode has to keep them mounted so the icons stay visible,
+  and the collapse button is hidden by `RAIL_HIDDEN` there, so the override is correct
+  on desktop.
+- `isRail` is never reset on resize, and the rail toggle is `hidden md:inline-flex`,
+  so on mobile the header button is visible and clickable while `isRail` still forces
+  the rows open.
+- Fix: treat rail mode as expanded only on desktop. `isMobile` is already on the
+  `useSidebar()` context, so the gate becomes `isExpanded || (isRail && !isMobile)`.
 
 ## Notes
 
-<!-- Any extra notes -->
+- One-line change in a single file; no other component reads `isRail` for this purpose.
+- Consistent with the rest of the sidebar: `RAIL_HIDDEN` and `RAIL_CENTER` in
+  `sidebar-styles.ts` are already `md:`-prefixed, so rail mode was desktop-only
+  everywhere except this one JS gate. `useIsMobile` tests `max-width: 767px`, the exact
+  complement of Tailwind's `md:`, so the two agree at every viewport width.
+- Verified in the browser: rail on desktop → narrow below `md` → both group headers
+  collapse in the drawer → widen and the rail icons still show.
+- Source: codebase scan, 2026-08-14 (low-risk quick win #5).
 
 ## History
 

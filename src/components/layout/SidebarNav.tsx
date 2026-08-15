@@ -43,8 +43,12 @@ function SidebarGroup({
   label: string;
   children: ReactNode;
 }) {
-  const { isRail } = useSidebar();
+  const { isMobile, isRail } = useSidebar();
   const [isExpanded, setIsExpanded] = useState(true);
+
+  // Rail mode hides the collapse button and needs the icons to stay visible, so it
+  // forces the rows open — but only on desktop, since isRail survives a resize to mobile
+  const isForcedOpen = isRail && !isMobile;
 
   return (
     <div className="py-2">
@@ -65,7 +69,7 @@ function SidebarGroup({
           )}
         />
       </button>
-      {(isExpanded || isRail) && (
+      {(isExpanded || isForcedOpen) && (
         <div className="mt-1 space-y-0.5">{children}</div>
       )}
     </div>
