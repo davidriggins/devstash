@@ -19,3 +19,12 @@ Read the following to get the full context of the project:
 - **Lint**: `npm run lint`
 - **Test**: `npm run test` (single run)
 - **Test watch**: `npm run test:watch`
+
+## Database Commands
+
+- **Generate client**: `npm run db:generate`
+- **Create migration**: `npm run db:migrate` (dev)
+- **Apply migrations**: `npm run db:deploy` (production)
+- **Seed**: `npm run db:seed`
+- **Studio**: `npm run db:studio`
+- **Connection test**: `npm run db:test` (prints seeded data and asserts consistency)

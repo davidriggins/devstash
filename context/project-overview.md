@@ -707,6 +707,7 @@ devstash/
 │   │   │   ├── ai/
 │   │   │   ├── upload/
 │   │   │   └── webhooks/stripe/
+│   │   ├── globals.css
 │   │   ├── layout.tsx
 │   │   └── page.tsx
 │   ├── components/
@@ -723,11 +724,8 @@ devstash/
 │   │   ├── r2.ts
 │   │   └── constants/
 │   ├── hooks/
-│   ├── types/
-│   └── styles/
-│       └── globals.css
+│   └── types/
 ├── public/
-├── .env.example
 ├── next.config.ts
 ├── tailwind.config.ts
 ├── tsconfig.json
@@ -756,4 +754,4 @@ devstash/
 
 ---
 
-_Last updated: January 2025_
+_Last updated: August 2026_
