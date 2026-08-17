@@ -40,3 +40,4 @@ Read the following to get the full context of the project:
 - **If `development` does not exist**: Stop and tell me. Do not fall back to `production`, and do not create the branch without asking.
 - **Destructive SQL** (`DROP`, `DELETE`, `TRUNCATE`, `UPDATE`/`ALTER` without a `WHERE`) requires my confirmation first, even on `development`.
 - **Schema changes** still go through Prisma migrations (`npm run db:migrate`), never through raw SQL over MCP. See the migration warning in @context/project-overview.md.
+- **IMPORTANT** Do not add Claude to any commit messages
