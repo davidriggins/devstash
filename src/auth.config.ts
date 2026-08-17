@@ -14,12 +14,25 @@ import type { NextAuthConfig } from "next-auth";
  */
 export const CREDENTIALS_PROVIDER_ID = "credentials";
 
+/** Where signed-out visitors land, and where NextAuth sends its own redirects */
+export const SIGN_IN_PATH = "/sign-in";
+
+/** Where a successful sign-in lands when nothing else was requested */
+export const DEFAULT_SIGN_IN_REDIRECT = "/dashboard";
+
 export const credentialFields = {
   email: { label: "Email", type: "email" },
   password: { label: "Password", type: "password" },
 };
 
 export default {
+  pages: {
+    // Our own pages replace NextAuth's built-in ones. `signIn` also receives
+    // NextAuth's own redirects (an unauthenticated `signIn()` call, an OAuth
+    // failure), so the error query param lands here too.
+    signIn: SIGN_IN_PATH,
+    error: SIGN_IN_PATH,
+  },
   providers: [
     GitHub,
     Credentials({
