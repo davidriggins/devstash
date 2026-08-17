@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+
+import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,7 +25,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`dark ${geistSans.variable} ${geistMono.variable} antialiased`}
     >
-      <body>{children}</body>
+      {/* Toaster is a provider, so it wraps the tree rather than sitting beside
+          it. At the root, a toast raised just before a navigation survives it. */}
+      <body>
+        <Toaster>{children}</Toaster>
+      </body>
     </html>
   );
 }

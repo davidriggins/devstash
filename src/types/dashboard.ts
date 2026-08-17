@@ -12,6 +12,13 @@ export interface DashboardItem {
   tags: string[];
 }
 
+/** The signed-in user as the sidebar shows them, taken from the session */
+export interface SidebarUserProfile {
+  name: string | null;
+  email: string | null;
+  image: string | null;
+}
+
 /** A sidebar type row's data, shaped by `getItemTypeCounts` */
 export interface SidebarItemType {
   id: string;

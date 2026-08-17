@@ -1,16 +1,31 @@
-# Current Feature
+# Current Feature: Auth UI - Sign In, Register & Sign Out
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Replace the NextAuth default pages with custom UI, and surface the signed-in user in the sidebar's user area
+- **Sign in page (`/sign-in`)**: email and password fields, a "Sign in with GitHub" button, a link to the register page, and form validation with error display
+- **Register page (`/register`)**: name, email, password and confirm-password fields, validation (passwords match, email format), submits to `POST /api/auth/register`, redirects to sign-in on success
+- **Sidebar user area**: user avatar (GitHub `image`, else initials), user name, and a dropdown on avatar click containing "Sign out"; clicking the icon navigates to `/profile`
+- **Reusable avatar component** handling both the image and initials cases (e.g. "Brad Traversy" → "BT")
+
 ## Notes
 
 <!-- Any extra notes -->
+
+- Spec: @context/features/auth-phase-3-spec.md
+- Builds on auth phases 1 and 2 — the GitHub and Credentials providers, `/api/auth/register`, and the shared Zod rules in `src/lib/validation/auth.ts` all already exist. This phase is UI only; reuse those validation schemas on the client rather than restating the rules.
+- `src/proxy.ts` currently redirects to NextAuth's built-in sign-in page; it needs to point at `/sign-in`, and `authConfig` needs a `pages.signIn` entry so NextAuth's own redirects follow suit.
+- Two open points in the spec, both resolved toward the Requirements section unless told otherwise:
+  - Requirements say the avatar lives at the **bottom of the sidebar**, but testing steps 4–5 say the **top bar**. Going with the sidebar user area, which already exists from Dashboard UI Phase 2.
+  - The spec has the avatar click both opening the dropdown and navigating to `/profile`. Plan: avatar/user row opens the dropdown; the dropdown holds a "Profile" link to `/profile` plus "Sign out".
+- `/profile` is not part of this spec beyond being linked to. No page will be built for it here.
+- `getCurrentUserId` still returns the hardcoded demo user (noted in auth phase 1), so dashboard data stays demo data even once a real user is signed in. Out of scope here unless the sidebar name/avatar must match the real session — which it must, so the sidebar user area reads from `auth()` directly, not from the demo user.
 
 ## History
 

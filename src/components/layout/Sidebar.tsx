@@ -4,18 +4,24 @@ import { SidebarNav } from "@/components/layout/SidebarNav";
 import { useSidebar } from "@/components/layout/SidebarProvider";
 import { SidebarUser } from "@/components/layout/SidebarUser";
 import { cn } from "@/lib/utils";
-import type { SidebarCollection, SidebarItemType } from "@/types/dashboard";
+import type {
+  SidebarCollection,
+  SidebarItemType,
+  SidebarUserProfile,
+} from "@/types/dashboard";
 
 interface SidebarProps {
   itemTypes: SidebarItemType[];
   favoriteCollections: SidebarCollection[];
   recentCollections: SidebarCollection[];
+  user: SidebarUserProfile | null;
 }
 
 export function Sidebar({
   itemTypes,
   favoriteCollections,
   recentCollections,
+  user,
 }: SidebarProps) {
   const { isMobile, isOpen, isMobileOpen, isRail, closeMobile } = useSidebar();
   const isVisible = isMobile ? isMobileOpen : isOpen;
@@ -53,7 +59,7 @@ export function Sidebar({
             favoriteCollections={favoriteCollections}
             recentCollections={recentCollections}
           />
-          <SidebarUser />
+          <SidebarUser user={user} />
         </div>
       </aside>
     </>
