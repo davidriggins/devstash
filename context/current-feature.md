@@ -1,16 +1,41 @@
-# Current Feature
+# Current Feature: Environment Badge
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
 <!-- Goals & requirements -->
 
+- Show, in the dashboard top bar, which Neon branch the app is actually connected to
+- Derive the label from `DATABASE_URL`'s host rather than a separate env var, so it cannot drift from the real connection
+- Map known endpoints to friendly names (`development`, `production`) and fall back to the raw endpoint id when unrecognised, so it is never misleading
+- Make a production connection visually loud — that is the case worth catching
+- Render nothing in a production build, so it can never reach real users
+- Never render credentials — host only
+
 ## Notes
 
 <!-- Any extra notes -->
+
+- Motivated by this session: `.env` pointed at the production branch while the CLAUDE.md Neon rules assumed development, and nothing in the UI showed it. The dashboard looks identical on both branches because `getCurrentUserId` is hardcoded to the demo user and the sidebar user area is `mockUser`
+- Endpoint → branch mapping for this project: `ep-green-truth-aylaseez` = `development` (`br-still-paper-ay42lb16`), `ep-damp-frost-ay6iupf5` = `production` (`br-withered-credit-ayav1rad`)
+- Server component; `DATABASE_URL` must never reach the client
+- Small, self-contained: a lib function, one component, one line in `Topbar`
+
+### Implementation
+
+- `src/lib/db-environment.ts` — `getDatabaseEnvironment()` parses `DATABASE_URL`, strips the `-pooler` suffix off the host's first label to get the endpoint id, and looks it up in `NEON_ENDPOINT_BRANCHES`. Returns `null` for a missing or unparseable URL so a bad value can't crash the layout
+- `src/components/layout/EnvironmentBadge.tsx` — server component, returns `null` when `NODE_ENV === "production"`. `destructive` variant + `TriangleAlert` for production, `outline` + `Database` otherwise; endpoint id in the `title` attribute
+- Rendered in `Topbar` between the logo and the search box
+
+### Verified
+
+- Logic covers all seven cases: dev pooler and direct hosts both → `development`; production pooler → `production` with `isProduction: true`; an unknown endpoint reports its own id rather than guessing; `localhost` → `localhost`; unset and unparseable → `null` (badge renders nothing)
+- Dashboard shows an outline `DEVELOPMENT` badge against the current `.env`
+- Production styling checked by temporarily forcing the value rather than connecting the app to production; reverted from the index straight after, confirmed absent
+- `npm run build` and `npm run lint` clean
 
 ## History
 
