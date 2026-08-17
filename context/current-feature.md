@@ -1,56 +1,16 @@
-# Current Feature: Auth Setup - NextAuth + GitHub Provider
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
 <!-- Goals & requirements -->
 
-- Install NextAuth v5 (`next-auth@beta`) and `@auth/prisma-adapter`
-- Set up the split auth config pattern for edge compatibility
-- Add the GitHub OAuth provider
-- Protect `/dashboard/*` routes using the Next.js 16 proxy
-- Redirect unauthenticated users to the sign-in page
-- Use NextAuth's default sign-in page (no custom pages) for testing
-
 ## Notes
 
 <!-- Any extra notes -->
-
-Spec: `context/features/auth-phase-1-spec.md`
-
-**Files to create**
-
-1. `src/auth.config.ts` - edge-compatible config (providers only, no adapter)
-2. `src/auth.ts` - full config with Prisma adapter and JWT strategy
-3. `src/app/api/auth/[...nextauth]/route.ts` - export handlers from `auth.ts`
-4. `src/proxy.ts` - route protection with redirect logic
-5. `src/types/next-auth.d.ts` - extend the `Session` type with `user.id`
-
-**Gotchas** (verify current conventions with Context7)
-
-- Install `next-auth@beta`; `@latest` installs v4
-- Proxy file lives at `src/proxy.ts`, same level as `app/`
-- Named export: `export const proxy = auth(...)`, not a default export
-- `session: { strategy: 'jwt' }` is required with the split config pattern
-- Do not set `pages.signIn`
-
-**Environment variables**
-
-`AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`
-
-**Testing**
-
-1. `/dashboard` redirects to sign-in when signed out
-2. "Sign in with GitHub" completes the OAuth flow
-3. Redirect lands back on `/dashboard` after auth
-
-**References**
-
-- Edge compatibility: https://authjs.dev/getting-started/installation#edge-compatibility
-- Prisma adapter: https://authjs.dev/getting-started/adapters/prisma
 
 ## History
 
@@ -71,3 +31,4 @@ Spec: `context/features/auth-phase-1-spec.md`
 - Stats & sidebar: system item types with real per-type counts via `getItemTypeCounts`, favorite and recent collections via `getSidebarCollections`, a colored dot for each recent collection's most-used type, a "View all collections" link, and the dashboard layout fetching both for the sidebar
 - Pro badge: `PRO_ITEM_TYPES` and `isProItemType` in the item type constants, and a subtle outline `Badge` on the Files and Images rows in the sidebar between the label and the count, hidden in collapsed rail mode; visual marker only, no route gating yet
 - Sidebar group collapse on mobile: `SidebarGroup` now treats icon-rail mode as forced-open only on desktop, so the drawer's "Types" and "Collections" headers collapse again after a desktop rail state carries over to a mobile viewport; brings the JS gate in line with the `md:`-prefixed rail styles in `sidebar-styles.ts`
+- Auth phase 1 (NextAuth + GitHub): split config keeping Prisma off the edge — `src/auth.config.ts` holds the GitHub provider alone while `src/auth.ts` adds `PrismaAdapter` over the existing prisma singleton, a JWT session strategy, and a session callback copying `token.sub` onto `session.user.id`; `src/proxy.ts` exports a named `proxy` guarding `/dashboard/*` and redirecting signed-out visitors to NextAuth's built-in sign-in page with a `callbackUrl`; `src/types/next-auth.d.ts` narrows `user.id` to a required string. Verified the redirect, the sign-in page and the GitHub OAuth handoff; the full round-trip back to `/dashboard` was left for manual sign-in. Note: `getCurrentUserId` still returns the hardcoded demo user, so the dashboard shows demo data no matter who signs in
