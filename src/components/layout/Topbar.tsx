@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FolderPlus, Layers, Plus, Search } from "lucide-react";
 
+import { EnvironmentBadge } from "@/components/layout/EnvironmentBadge";
 import { SidebarToggle } from "@/components/layout/SidebarToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,8 @@ export function Topbar() {
           DevStash
         </span>
       </Link>
+
+      <EnvironmentBadge />
 
       <div className="relative w-full max-w-lg">
         <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
