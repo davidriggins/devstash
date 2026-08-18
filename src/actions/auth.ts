@@ -1,12 +1,14 @@
 "use server";
 
-import { AuthError } from "next-auth";
+import { AuthError, CredentialsSignin } from "next-auth";
 
 import {
   CREDENTIALS_PROVIDER_ID,
   DEFAULT_SIGN_IN_REDIRECT,
+  EMAIL_NOT_VERIFIED_CODE,
   SIGN_IN_PATH,
 } from "@/auth.config";
+import { EMAIL_NOT_VERIFIED_MESSAGE } from "@/lib/auth/messages";
 import { signIn, signOut } from "@/auth";
 import { safePath } from "@/lib/search-params";
 import { signInSchema } from "@/lib/validation/auth";
@@ -48,6 +50,14 @@ export async function signInWithCredentials(
     // A successful sign-in throws NEXT_REDIRECT, which is not an AuthError and
     // has to keep travelling for the redirect to happen
     if (error instanceof AuthError) {
+      // The password was right but the address is unconfirmed, so this says so
+      if (
+        error instanceof CredentialsSignin &&
+        error.code === EMAIL_NOT_VERIFIED_CODE
+      ) {
+        return { error: EMAIL_NOT_VERIFIED_MESSAGE };
+      }
+
       // Deliberately vague: saying which half was wrong tells an attacker
       // which emails have accounts
       return { error: "Invalid email or password" };

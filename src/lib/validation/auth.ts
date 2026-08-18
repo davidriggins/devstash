@@ -14,7 +14,7 @@ export const PASSWORD_MIN_LENGTH = 8;
  * `z.email()` carries its format check at the base, so trimming after it would
  * never run on input the check has already rejected.
  */
-const emailSchema = z
+export const emailSchema = z
   .string()
   .trim()
   .toLowerCase()

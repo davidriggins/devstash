@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
 
 import { signInWithCredentials, signInWithGitHub } from "@/actions/auth";
@@ -9,6 +10,7 @@ import { AuthField } from "@/components/auth/AuthField";
 import { SubmitButton } from "@/components/auth/SubmitButton";
 import { GitHubIcon } from "@/components/shared/GitHubIcon";
 import { Separator } from "@/components/ui/separator";
+import { EMAIL_NOT_VERIFIED_MESSAGE } from "@/lib/auth/messages";
 
 interface SignInFormProps {
   /** Where to land after signing in; re-sent with each provider */
@@ -24,6 +26,12 @@ export function SignInForm({ callbackUrl, initialError }: SignInFormProps) {
     signInWithCredentials,
     EMPTY_STATE
   );
+
+  const error = state.error ?? initialError;
+
+  // Both sources of this message use the one constant, so matching on it is
+  // enough to know a new link is what the reader needs
+  const needsVerification = error === EMAIL_NOT_VERIFIED_MESSAGE;
 
   return (
     <>
@@ -48,7 +56,16 @@ export function SignInForm({ callbackUrl, initialError }: SignInFormProps) {
           required
         />
 
-        <AuthError message={state.error ?? initialError} />
+        <AuthError message={error} />
+
+        {needsVerification ? (
+          <Link
+            href="/verify-email"
+            className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Send a new verification link
+          </Link>
+        ) : null}
 
         <SubmitButton size="lg" className="h-10 w-full rounded-xl">
           Sign in

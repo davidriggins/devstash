@@ -1,16 +1,30 @@
-# Current Feature
+# Current Feature: Email Verification on Register
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Registering through `POST /api/auth/register` sends a verification email via Resend containing a single-use link; the account is created but starts unverified (`User.emailVerified` stays `null`).
+- A `GET /api/auth/verify-email` (or `/verify-email` route) consumes the token, sets `emailVerified`, and redirects to a page that says what happened — success, already verified, expired, or invalid token.
+- Credentials sign-in is blocked while `emailVerified` is `null`, with a message that tells the user to check their email rather than implying the password was wrong.
+- Unverified users can request a fresh link ("resend verification email"), which invalidates or replaces the previous one.
+- The register page tells the user to check their inbox instead of implying they are signed in.
+- Tokens are single-use, expiring, and unguessable; the raw token never lands in a log or an error message.
+- `npm run build` passes and the flow is verified end to end in the browser against the **development** Neon branch.
 
 ## Notes
 
-<!-- Any extra notes -->
+- Resend is not installed yet — `RESEND_API_KEY` is in `.env` but there is no `resend` dependency and no email code in the repo.
+- `User.emailVerified` (`DateTime?`) and the NextAuth `VerificationToken` model both already exist in `prisma/schema.prisma`, so token storage may need no migration. If a schema change is needed it goes through `npm run db:migrate`, never `db push`.
+- The registration endpoint stays the endpoint (a future mobile/CLI client calls it), so sending must happen server-side inside the route, and a Resend failure must not leave a user with an account they can never verify — decide between rolling back the create and surfacing a "resend" path.
+- GitHub OAuth accounts arrive already verified by the provider — the sign-in block must apply to credentials only, or GitHub users get locked out.
+- Decisions settled at start:
+  - **From address**: the Resend account has no verified domain (`GET /domains` returned an empty list), so the sender is `onboarding@resend.dev`, read from a new `EMAIL_FROM` env var so swapping to a real domain later is config, not code. That sandbox sender only delivers to the Resend account owner's own address, so end-to-end mail testing has to use that address.
+  - **Base URL**: add `AUTH_URL` rather than a second app-url variable — NextAuth already reads it, so one value covers both and cannot drift.
+  - **Existing users**: a one-off script marks every current user verified, and `prisma/seed.ts` sets `emailVerified` on the demo user, so nobody who already had an account is locked out.
+  - **Sign-in block**: a wrong password keeps the existing vague "Invalid email or password"; only a *correct* password on an unverified account gets the "check your email" message. By then the requester has proved they own the credentials, so it is not an account-existence oracle.
 
 ## History
 

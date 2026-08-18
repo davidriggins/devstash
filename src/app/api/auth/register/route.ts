@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
+import { createVerificationToken } from "@/lib/auth/verification-token";
+import { sendVerificationEmail } from "@/lib/email/verification-email";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validation/auth";
 
@@ -64,7 +66,19 @@ export async function POST(request: Request) {
       select: { id: true, name: true, email: true },
     });
 
-    return NextResponse.json({ success: true, data: user }, { status: 201 });
+    // The account exists and stays unverified until the link is clicked. A
+    // failed send is reported rather than rolled back: the account is real, and
+    // the resend endpoint is how the user recovers from it.
+    const emailSent = await sendVerificationEmail({
+      to: user.email,
+      name: user.name ?? user.email,
+      token: await createVerificationToken(user.email),
+    });
+
+    return NextResponse.json(
+      { success: true, data: { ...user, emailSent } },
+      { status: 201 }
+    );
   } catch (error) {
     // Two simultaneous signups can both clear the check above; the unique
     // index on `email` is what actually decides, so report the loser as a dupe

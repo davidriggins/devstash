@@ -1,14 +1,27 @@
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 import authConfig, {
   CREDENTIALS_PROVIDER_ID,
+  EMAIL_NOT_VERIFIED_CODE,
   credentialFields,
 } from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { signInSchema } from "@/lib/validation/auth";
+
+/**
+ * The one failure `authorize` reports specifically. Every other rejection
+ * returns `null` and reads as "invalid email or password", because saying more
+ * would tell a stranger which addresses have accounts.
+ *
+ * This one is safe to name: it is only ever thrown *after* the password
+ * matched, so whoever sees it already knew the account existed.
+ */
+class EmailNotVerifiedError extends CredentialsSignin {
+  code = EMAIL_NOT_VERIFIED_CODE;
+}
 
 /**
  * The real Credentials provider. It replaces the edge placeholder from
@@ -34,6 +47,12 @@ const credentialsProvider = Credentials({
 
     if (!(await bcrypt.compare(password, user.password))) {
       return null;
+    }
+
+    // Deliberately after the password check, so a wrong guess still gets the
+    // vague answer and cannot be used to probe for accounts
+    if (!user.emailVerified) {
+      throw new EmailNotVerifiedError();
     }
 
     return {
