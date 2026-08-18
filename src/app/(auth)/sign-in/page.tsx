@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { DEFAULT_SIGN_IN_REDIRECT } from "@/auth.config";
+import { EMAIL_NOT_VERIFIED_CODE } from "@/auth.config";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { SignInForm } from "@/components/auth/SignInForm";
+import { EMAIL_NOT_VERIFIED_MESSAGE } from "@/lib/auth/messages";
 import { firstParam, safePath } from "@/lib/search-params";
 
 // Branches on the session, so it must never be prerendered or cached
@@ -37,6 +39,12 @@ export default async function SignInPage({
   const params = await searchParams;
   const errorCode = firstParam(params.error);
 
+  // A CredentialsSignin redirect carries the specific reason in `code`, so an
+  // unverified account is told what to do rather than getting the vague line
+  const isUnverified =
+    firstParam(params.code)?.toLowerCase() ===
+    EMAIL_NOT_VERIFIED_CODE.toLowerCase();
+
   return (
     <AuthCard
       title="Welcome back"
@@ -56,9 +64,11 @@ export default async function SignInPage({
           DEFAULT_SIGN_IN_REDIRECT
         )}
         initialError={
-          errorCode
-            ? (ERROR_MESSAGES[errorCode] ?? "Could not sign you in")
-            : undefined
+          isUnverified
+            ? EMAIL_NOT_VERIFIED_MESSAGE
+            : errorCode
+              ? (ERROR_MESSAGES[errorCode] ?? "Could not sign you in")
+              : undefined
         }
       />
     </AuthCard>

@@ -54,18 +54,25 @@ export function RegisterForm() {
         return;
       }
 
+      // The route reports whether the verification email actually went out, so
+      // a send failure lands on a page that says so instead of one telling
+      // them to check an inbox nothing was sent to
+      const emailSent = result?.data?.emailSent !== false;
+
       // Registration does not sign them in, so say what to do next. The
       // Toaster lives in the root layout, so this outlives the redirect.
       toast.add({
         title: "Account created",
-        description: "You can now sign in with your email and password.",
-        type: "success",
+        description: emailSent
+          ? "Check your email for the link to verify your address."
+          : "We could not send your verification email. Ask for a new link.",
+        type: emailSent ? "success" : "error",
         // Longer than the 5s default: it lands mid-navigation, when the
         // reader's attention is on the page changing under them
         timeout: 8000,
       });
 
-      router.push("/sign-in");
+      router.push(emailSent ? "/verify-email" : "/verify-email?status=send-failed");
     } catch {
       setError("Could not reach the server. Try again.");
       setIsSubmitting(false);

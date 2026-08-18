@@ -20,6 +20,15 @@ export const SIGN_IN_PATH = "/sign-in";
 /** Where a successful sign-in lands when nothing else was requested */
 export const DEFAULT_SIGN_IN_REDIRECT = "/dashboard";
 
+/** Where the verification link's outcome is reported, and where a new account lands */
+export const VERIFY_EMAIL_PATH = "/verify-email";
+
+/**
+ * `CredentialsSignin.code` for an unverified account. It travels in the URL on
+ * NextAuth's own redirects, so it names a state rather than describing one.
+ */
+export const EMAIL_NOT_VERIFIED_CODE = "EmailNotVerified";
+
 export const credentialFields = {
   email: { label: "Email", type: "email" },
   password: { label: "Password", type: "password" },
