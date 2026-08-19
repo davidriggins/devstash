@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
 import { DEFAULT_SIGN_IN_REDIRECT } from "@/auth.config";
 import { EMAIL_NOT_VERIFIED_CODE } from "@/auth.config";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { SignInForm } from "@/components/auth/SignInForm";
 import { EMAIL_NOT_VERIFIED_MESSAGE } from "@/lib/auth/messages";
+import { getCurrentUser } from "@/lib/db/user";
 import { firstParam, safePath } from "@/lib/search-params";
 
 // Branches on the session, so it must never be prerendered or cached
@@ -31,8 +31,11 @@ const ERROR_MESSAGES: Record<string, string> = {
 export default async function SignInPage({
   searchParams,
 }: PageProps<"/sign-in">) {
-  // Nothing to sign into if they already are
-  if (await auth()) {
+  // Nothing to sign into if they already are. This asks the database rather
+  // than just the session: a JWT outlives the account it names, and treating a
+  // deleted user as signed in bounces them back out of every page that sends
+  // them here — a loop with no way to sign in again.
+  if (await getCurrentUser()) {
     redirect(DEFAULT_SIGN_IN_REDIRECT);
   }
 
