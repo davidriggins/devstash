@@ -54,6 +54,27 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export const forgotPasswordSchema = z.object({ email: emailSchema });
 
 /**
+ * Changing a password from inside the account, which is not the same as
+ * resetting a forgotten one: the current password stands in for the emailed
+ * link as proof, so that an unlocked screen someone walked away from cannot be
+ * turned into a stolen account.
+ */
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Enter your current password"),
+    newPassword: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  })
+  .refine((data) => data.newPassword !== data.currentPassword, {
+    message: "Your new password must be different from the current one",
+    path: ["newPassword"],
+  });
+
+/**
  * The token rides in the request body rather than being read from the URL on
  * the server, because the reset page hands it to the form and the form is what
  * submits it. It is still checked against the database, so an empty or made-up

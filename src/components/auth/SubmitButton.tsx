@@ -10,12 +10,15 @@ import { Button } from "@/components/ui/button";
  */
 export function SubmitButton({
   children,
+  disabled,
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { pending } = useFormStatus();
 
+  // Combined rather than spread over: a caller passing its own `disabled` must
+  // not silently lose the in-flight guard
   return (
-    <Button type="submit" disabled={pending} {...props}>
+    <Button type="submit" disabled={pending || disabled} {...props}>
       {children}
     </Button>
   );

@@ -10,9 +10,13 @@ export const dynamic = "force-dynamic";
 
 const RECENT_COLLECTIONS_LIMIT = 5;
 
-export default async function DashboardLayout({
-  children,
-}: LayoutProps<"/dashboard">) {
+/**
+ * The signed-in shell: top bar, sidebar, scrolling main area. It wraps every
+ * route in the `(app)` group — the dashboard and the profile page — so both
+ * carry the same chrome. The group adds no path segment, so the URLs are still
+ * `/dashboard` and `/profile`.
+ */
+export default async function AppLayout({ children }: LayoutProps<"/">) {
   const [itemTypes, collections, session] = await Promise.all([
     getItemTypeCounts(),
     getSidebarCollections(RECENT_COLLECTIONS_LIMIT),
