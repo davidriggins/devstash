@@ -24,6 +24,14 @@ export const DEFAULT_SIGN_IN_REDIRECT = "/dashboard";
 export const VERIFY_EMAIL_PATH = "/verify-email";
 
 /**
+ * Where the reset link points. A page, not a route: clicking it only reads the
+ * token to decide whether to show the form, and the change happens on submit.
+ * Lives here so the email that builds the link and the page that answers it
+ * cannot disagree.
+ */
+export const RESET_PASSWORD_PATH = "/reset-password";
+
+/**
  * `CredentialsSignin.code` for an unverified account. It travels in the URL on
  * NextAuth's own redirects, so it names a state rather than describing one.
  */

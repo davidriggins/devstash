@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { Prisma } from "@/generated/prisma/client";
+import { PASSWORD_RESET_IDENTIFIER_PREFIX } from "@/lib/auth/password-reset-token";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -90,7 +91,11 @@ export async function consumeVerificationToken(
     select: { identifier: true, expires: true },
   });
 
-  if (!record) {
+  // The table is shared with the password reset flow, which namespaces its
+  // identifiers. Tokens are found by hash, which is not namespaced, so without
+  // this a reset token could be spent here — and its identifier would be read
+  // as an email. Returning early also leaves that row alone: it is not ours.
+  if (!record || record.identifier.startsWith(PASSWORD_RESET_IDENTIFIER_PREFIX)) {
     return "invalid";
   }
 

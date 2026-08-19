@@ -20,6 +20,18 @@ export const emailSchema = z
   .toLowerCase()
   .pipe(z.email("Enter a valid email address"));
 
+/**
+ * The rule for a password being *set*, as opposed to one being offered at
+ * sign-in. Registration and password reset share it so the two can never drift
+ * into accepting different passwords.
+ */
+export const passwordSchema = z
+  .string()
+  .min(
+    PASSWORD_MIN_LENGTH,
+    `Password must be at least ${PASSWORD_MIN_LENGTH} characters`
+  );
+
 export const signInSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, "Password is required"),
@@ -29,12 +41,7 @@ export const registerSchema = z
   .object({
     name: z.string().trim().min(1, "Name is required").max(100),
     email: emailSchema,
-    password: z
-      .string()
-      .min(
-        PASSWORD_MIN_LENGTH,
-        `Password must be at least ${PASSWORD_MIN_LENGTH} characters`
-      ),
+    password: passwordSchema,
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -43,3 +50,22 @@ export const registerSchema = z
   });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
+
+export const forgotPasswordSchema = z.object({ email: emailSchema });
+
+/**
+ * The token rides in the request body rather than being read from the URL on
+ * the server, because the reset page hands it to the form and the form is what
+ * submits it. It is still checked against the database, so an empty or made-up
+ * value fails there too — this only saves a round trip.
+ */
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, "Reset token is missing"),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });

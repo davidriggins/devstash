@@ -1,8 +1,8 @@
-import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
 import { isEmailVerificationEnabled } from "@/lib/auth/email-verification";
+import { hashPassword } from "@/lib/auth/password";
 import { createVerificationToken } from "@/lib/auth/verification-token";
 import { sendVerificationEmail } from "@/lib/email/verification-email";
 import { prisma } from "@/lib/prisma";
@@ -15,10 +15,6 @@ import { registerSchema } from "@/lib/validation/auth";
  * Sits alongside NextAuth's `[...nextauth]` catch-all: the static `register`
  * segment wins, so this never reaches NextAuth's own handlers.
  */
-
-// Matches prisma/seed.ts so seeded and registered passwords hash the same way
-const PASSWORD_SALT_ROUNDS = 12;
-
 export async function POST(request: Request) {
   let body: unknown;
 
@@ -64,7 +60,7 @@ export async function POST(request: Request) {
       data: {
         name,
         email,
-        password: await bcrypt.hash(password, PASSWORD_SALT_ROUNDS),
+        password: await hashPassword(password),
         // With verification off the account is usable straight away, so it is
         // stamped verified here rather than left null for sign-in to ignore —
         // the flag can be turned back on without stranding these accounts

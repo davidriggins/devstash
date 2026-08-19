@@ -47,14 +47,23 @@ export function SignInForm({ callbackUrl, initialError }: SignInFormProps) {
           required
         />
 
-        <AuthField
-          id="password"
-          label="Password"
-          type="password"
-          autoComplete="current-password"
-          placeholder="••••••••"
-          required
-        />
+        <div className="flex flex-col gap-1.5">
+          <AuthField
+            id="password"
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            required
+          />
+
+          <Link
+            href="/forgot-password"
+            className="self-end text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Forgot your password?
+          </Link>
+        </div>
 
         <AuthError message={error} />
 
