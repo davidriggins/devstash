@@ -1,16 +1,47 @@
-# Current Feature
+# Current Feature: Email Verification Toggle
 
 ## Status
 
-Not Started
+Complete
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Add a single switch that turns the whole email verification system on or off, defaulting to **on** so nothing changes unless it is explicitly disabled.
+- Read the switch through one helper (`isEmailVerificationEnabled()`) so no other file parses the env var, and every call site asks the same question.
+- **When disabled:**
+  - `POST /api/auth/register` creates the account with `emailVerified` already set, sends no email, and never touches Resend — so a `RESEND_API_KEY`/`EMAIL_FROM` that is missing or sandbox-limited cannot break signup.
+  - Credentials `authorize` in `src/auth.ts` skips the `EmailNotVerifiedError` throw, so accounts left unverified from an earlier run can still sign in.
+  - `RegisterForm` sends the user to `/sign-in` with a "Account created — sign in" toast instead of `/verify-email`.
+  - `POST /api/auth/resend-verification` short-circuits to its existing generic response without sending.
+  - `GET /api/auth/verify-email` and the `/verify-email` page stay reachable but do nothing useful; a stale link should land somewhere sane rather than error.
+- **When enabled:** behaviour is byte-for-byte what it is today — the register → email → link → sign-in flow, the cooldown, and the unverified sign-in block.
+- Document the flag in `.env` and `.env.production` with a comment saying *why* it exists (no verified Resend domain; the sandbox sender only delivers to the Resend account owner).
+- Verify both states in the browser against the `development` branch: register with it off (no email, straight to sign-in, account signs in immediately), then register with it on (email arrives, link verifies, unverified sign-in still blocked).
 
 ## Notes
 
-<!-- Any extra notes -->
+### Approach
+
+An env var is the right call over a DB row or a build-time constant: it is per-environment (off locally, on in production once a domain is verified), needs no migration, and can be flipped without a deploy on hosts that support it. Recommended shape:
+
+```
+# Set to "false" to skip email verification entirely (no domain verified in Resend yet)
+EMAIL_VERIFICATION_ENABLED=true
+```
+
+Parse it **opt-out**, not opt-in — `enabled unless the value is exactly "false"` — so a missing or typo'd var fails to the secure state. It is a server-only value; it must never be prefixed `NEXT_PUBLIC_`, and the `RegisterForm` branch should key off something the register route returns (extend the existing `emailSent` shape, e.g. a `verificationRequired` field) rather than reading the flag on the client.
+
+Home for the helper: `src/lib/auth/email-verification.ts`, next to `messages.ts` and `verification-token.ts`.
+
+### Constraints
+
+- Do not delete or gut any of the existing verification code — this is a bypass, not a removal. Every path must come back intact when the flag flips.
+- No migration. `emailVerified` and `VerificationToken` already exist and stay as they are.
+- Existing unverified accounts are not backfilled by this feature; `db:backfill-verified` already exists if that is ever wanted.
+
+### Open question
+
+When verification is disabled, registration still does **not** sign the user in — they land on `/sign-in`. Auto-signing them in would be a nicer flow but is a behaviour change beyond the toggle, so it is out of scope unless asked for.
 
 ## History
 

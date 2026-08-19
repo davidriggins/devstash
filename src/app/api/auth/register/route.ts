@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
 import { Prisma } from "@/generated/prisma/client";
+import { isEmailVerificationEnabled } from "@/lib/auth/email-verification";
 import { createVerificationToken } from "@/lib/auth/verification-token";
 import { sendVerificationEmail } from "@/lib/email/verification-email";
 import { prisma } from "@/lib/prisma";
@@ -57,26 +58,37 @@ export async function POST(request: Request) {
       );
     }
 
+    const verificationRequired = isEmailVerificationEnabled();
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: await bcrypt.hash(password, PASSWORD_SALT_ROUNDS),
+        // With verification off the account is usable straight away, so it is
+        // stamped verified here rather than left null for sign-in to ignore —
+        // the flag can be turned back on without stranding these accounts
+        emailVerified: verificationRequired ? null : new Date(),
       },
       select: { id: true, name: true, email: true },
     });
 
-    // The account exists and stays unverified until the link is clicked. A
-    // failed send is reported rather than rolled back: the account is real, and
-    // the resend endpoint is how the user recovers from it.
-    const emailSent = await sendVerificationEmail({
-      to: user.email,
-      name: user.name ?? user.email,
-      token: await createVerificationToken(user.email),
-    });
+    // When verification is on, the account stays unverified until the link is
+    // clicked, and a failed send is reported rather than rolled back: the
+    // account is real, and the resend endpoint is how the user recovers from
+    // it. When it is off, nothing is sent and nothing is waiting on a link.
+    const emailSent = verificationRequired
+      ? await sendVerificationEmail({
+          to: user.email,
+          name: user.name ?? user.email,
+          token: await createVerificationToken(user.email),
+        })
+      : false;
 
+    // `verificationRequired` is how the client knows which page to send them
+    // to. The flag itself stays on the server.
     return NextResponse.json(
-      { success: true, data: { ...user, emailSent } },
+      { success: true, data: { ...user, verificationRequired, emailSent } },
       { status: 201 }
     );
   } catch (error) {

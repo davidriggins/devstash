@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isEmailVerificationEnabled } from "@/lib/auth/email-verification";
 import {
   createVerificationToken,
   hasRecentVerificationToken,
@@ -49,6 +50,12 @@ export async function POST(request: Request) {
   }
 
   const { email } = parsed.data;
+
+  // Nothing to verify when the flow is off. It answers as it always does — the
+  // generic response was already designed to reveal nothing.
+  if (!isEmailVerificationEnabled()) {
+    return NextResponse.json(GENERIC_RESPONSE);
+  }
 
   try {
     const user = await prisma.user.findUnique({
