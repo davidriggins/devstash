@@ -197,13 +197,17 @@ erDiagram
 ```prisma
 // prisma/schema.prisma
 
+// Prisma 7: the `prisma-client` generator replaces `prisma-client-js`, and an
+// explicit output path is required — the client is no longer written into
+// node_modules. The datasource URL lives in prisma.config.ts, not here.
+
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ============================================
@@ -252,6 +256,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -263,6 +268,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -301,11 +307,14 @@ model Item {
   updatedAt   DateTime    @updatedAt
 
   // Relations
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Restrict, not Cascade: a type in use must not take its items down with it
   itemTypeId String
-  itemType   ItemType @relation(fields: [itemTypeId], references: [id])
-  tags       Tag[]    @relation("ItemTags")
+  itemType   ItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+
+  tags Tag[] @relation("ItemTags")
 
   // Many-to-many with collections
   collections ItemCollection[]
@@ -326,7 +335,7 @@ model ItemType {
   color    String
   isSystem Boolean @default(false)
 
-  // Relations
+  // Relations — userId is null for the system types
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
   items  Item[]
@@ -335,6 +344,7 @@ model ItemType {
   defaultForCollections Collection[]
 
   @@unique([name, userId])
+  @@index([userId])
   @@map("item_types")
 }
 
@@ -350,15 +360,18 @@ model Collection {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  userId        String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // SetNull: losing the default type must not delete the collection
   defaultTypeId String?
-  defaultType   ItemType? @relation(fields: [defaultTypeId], references: [id])
+  defaultType   ItemType? @relation(fields: [defaultTypeId], references: [id], onDelete: SetNull)
 
   // Many-to-many with items
   items ItemCollection[]
 
   @@index([userId])
+  @@index([defaultTypeId])
   @@map("collections")
 }
 
@@ -374,6 +387,8 @@ model ItemCollection {
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
 
   @@id([itemId, collectionId])
+  // The composite id already covers itemId lookups; this covers the reverse
+  @@index([collectionId])
   @@map("item_collections")
 }
 

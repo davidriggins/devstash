@@ -28,6 +28,8 @@ Read the following to get the full context of the project:
 - **Seed**: `npm run db:seed`
 - **Studio**: `npm run db:studio`
 - **Connection test**: `npm run db:test` (prints seeded data and asserts consistency)
+- **Backfill verified**: `npm run db:backfill-verified` (stamps `emailVerified` on accounts where it is null; never un-verifies anyone)
+- **Delete test users**: `npm run db:delete-users` (dry run) / `npm run db:delete-users -- --yes` (deletes every account except `demo@devstash.io`, with its items, types and collections; refuses to run against production unless `--allow-production` is also passed)
 
 ## Neon MCP
 
