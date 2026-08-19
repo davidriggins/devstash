@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CircleCheck, Mail, MailWarning, TriangleAlert } from "lucide-react";
 
+import { SIGN_IN_PATH } from "@/auth.config";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { ResendVerificationForm } from "@/components/auth/ResendVerificationForm";
 import { buttonVariants } from "@/components/ui/button";
+import { isEmailVerificationEnabled } from "@/lib/auth/email-verification";
 import { firstParam } from "@/lib/search-params";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +97,12 @@ function toStatus(value: string | undefined): Status {
 export default async function VerifyEmailPage({
   searchParams,
 }: PageProps<"/verify-email">) {
+  // With verification off, nothing routes here and every status would be a
+  // lie — the resend form included, since that endpoint no longer sends
+  if (!isEmailVerificationEnabled()) {
+    redirect(SIGN_IN_PATH);
+  }
+
   const params = await searchParams;
   const view = STATUS_VIEWS[toStatus(firstParam(params.status))];
   const Icon = view.icon;

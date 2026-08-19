@@ -8,6 +8,7 @@ import authConfig, {
   EMAIL_NOT_VERIFIED_CODE,
   credentialFields,
 } from "@/auth.config";
+import { isEmailVerificationEnabled } from "@/lib/auth/email-verification";
 import { prisma } from "@/lib/prisma";
 import { signInSchema } from "@/lib/validation/auth";
 
@@ -50,8 +51,10 @@ const credentialsProvider = Credentials({
     }
 
     // Deliberately after the password check, so a wrong guess still gets the
-    // vague answer and cannot be used to probe for accounts
-    if (!user.emailVerified) {
+    // vague answer and cannot be used to probe for accounts. Skipped entirely
+    // when verification is off, which also lets accounts left unverified by an
+    // earlier run sign in.
+    if (isEmailVerificationEnabled() && !user.emailVerified) {
       throw new EmailNotVerifiedError();
     }
 

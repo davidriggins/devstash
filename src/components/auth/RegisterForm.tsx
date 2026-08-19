@@ -54,6 +54,21 @@ export function RegisterForm() {
         return;
       }
 
+      // Verification can be switched off server-side, in which case the account
+      // is already usable. Only an explicit `false` takes this path, so an
+      // older or unexpected response still asks them to check their email.
+      if (result?.data?.verificationRequired === false) {
+        toast.add({
+          title: "Account created",
+          description: "You can sign in now.",
+          type: "success",
+          timeout: 8000,
+        });
+
+        router.push("/sign-in");
+        return;
+      }
+
       // The route reports whether the verification email actually went out, so
       // a send failure lands on a page that says so instead of one telling
       // them to check an inbox nothing was sent to
