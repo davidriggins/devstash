@@ -6,6 +6,11 @@ import {
 } from "@/lib/auth/password-reset-token";
 import { sendPasswordResetEmail } from "@/lib/email/password-reset-email";
 import { prisma } from "@/lib/prisma";
+import {
+  checkRateLimit,
+  rateLimitKey,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { forgotPasswordSchema } from "@/lib/validation/auth";
 
 /**
@@ -46,6 +51,18 @@ export async function POST(request: Request) {
       { success: false, error: "Enter a valid email address" },
       { status: 400 }
     );
+  }
+
+  // Before the lookup, so the counter moves identically for an address with an
+  // account and one without. Keyed by IP alone, so a 429 says only that this
+  // caller has asked too often — never which addresses are real.
+  const limit = await checkRateLimit(
+    "forgotPassword",
+    rateLimitKey(request.headers)
+  );
+
+  if (!limit.success) {
+    return rateLimitResponse(limit);
   }
 
   const { email } = parsed.data;

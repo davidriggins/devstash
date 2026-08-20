@@ -6,6 +6,11 @@ import { hashPassword } from "@/lib/auth/password";
 import { createVerificationToken } from "@/lib/auth/verification-token";
 import { sendVerificationEmail } from "@/lib/email/verification-email";
 import { prisma } from "@/lib/prisma";
+import {
+  checkRateLimit,
+  rateLimitKey,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { registerSchema } from "@/lib/validation/auth";
 
 /**
@@ -37,6 +42,14 @@ export async function POST(request: Request) {
       },
       { status: 400 }
     );
+  }
+
+  // After the parse and before the lookup: every well-formed signup attempt
+  // counts, whether or not the address turns out to be taken
+  const limit = await checkRateLimit("register", rateLimitKey(request.headers));
+
+  if (!limit.success) {
+    return rateLimitResponse(limit);
   }
 
   const { name, email, password } = parsed.data;

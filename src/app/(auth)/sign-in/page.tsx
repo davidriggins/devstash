@@ -2,10 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { DEFAULT_SIGN_IN_REDIRECT } from "@/auth.config";
-import { EMAIL_NOT_VERIFIED_CODE } from "@/auth.config";
+import { EMAIL_NOT_VERIFIED_CODE, RATE_LIMITED_CODE } from "@/auth.config";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { SignInForm } from "@/components/auth/SignInForm";
-import { EMAIL_NOT_VERIFIED_MESSAGE } from "@/lib/auth/messages";
+import {
+  EMAIL_NOT_VERIFIED_MESSAGE,
+  RATE_LIMITED_MESSAGE,
+} from "@/lib/auth/messages";
 import { getCurrentUser } from "@/lib/db/user";
 import { firstParam, safePath } from "@/lib/search-params";
 
@@ -43,10 +46,12 @@ export default async function SignInPage({
   const errorCode = firstParam(params.error);
 
   // A CredentialsSignin redirect carries the specific reason in `code`, so an
-  // unverified account is told what to do rather than getting the vague line
-  const isUnverified =
-    firstParam(params.code)?.toLowerCase() ===
-    EMAIL_NOT_VERIFIED_CODE.toLowerCase();
+  // unverified account is told what to do rather than getting the vague line.
+  // The rate-limit code arrives the same way — including for a caller who
+  // posted straight at the credentials callback and was refused in `authorize`.
+  const code = firstParam(params.code)?.toLowerCase();
+  const isUnverified = code === EMAIL_NOT_VERIFIED_CODE.toLowerCase();
+  const isRateLimited = code === RATE_LIMITED_CODE.toLowerCase();
 
   return (
     <AuthCard
@@ -69,9 +74,11 @@ export default async function SignInPage({
         initialError={
           isUnverified
             ? EMAIL_NOT_VERIFIED_MESSAGE
-            : errorCode
-              ? (ERROR_MESSAGES[errorCode] ?? "Could not sign you in")
-              : undefined
+            : isRateLimited
+              ? RATE_LIMITED_MESSAGE
+              : errorCode
+                ? (ERROR_MESSAGES[errorCode] ?? "Could not sign you in")
+                : undefined
         }
       />
     </AuthCard>

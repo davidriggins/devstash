@@ -8,6 +8,11 @@ import {
 } from "@/lib/auth/verification-token";
 import { sendVerificationEmail } from "@/lib/email/verification-email";
 import { prisma } from "@/lib/prisma";
+import {
+  checkRateLimit,
+  rateLimitKey,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { emailSchema } from "@/lib/validation/auth";
 
 /**
@@ -50,6 +55,19 @@ export async function POST(request: Request) {
   }
 
   const { email } = parsed.data;
+
+  // Ahead of both the feature flag and the lookup, so the counter moves for
+  // every well-formed request. Narrowed to IP + address because the thing being
+  // rationed is links to one inbox; the 60s cooldown below is a separate
+  // control protecting that inbox from any source, and both apply.
+  const limit = await checkRateLimit(
+    "resendVerification",
+    rateLimitKey(request.headers, email)
+  );
+
+  if (!limit.success) {
+    return rateLimitResponse(limit);
+  }
 
   // Nothing to verify when the flow is off. It answers as it always does — the
   // generic response was already designed to reveal nothing.

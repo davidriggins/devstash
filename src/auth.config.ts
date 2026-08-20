@@ -37,6 +37,14 @@ export const RESET_PASSWORD_PATH = "/reset-password";
  */
 export const EMAIL_NOT_VERIFIED_CODE = "EmailNotVerified";
 
+/**
+ * `CredentialsSignin.code` for a caller who has attempted too many sign-ins.
+ * Like the code above it travels in the URL, so it names the state rather than
+ * carrying the retry window — a direct POST to the credentials callback is
+ * redirected here too, and an identifier is not the place to put data.
+ */
+export const RATE_LIMITED_CODE = "RateLimited";
+
 export const credentialFields = {
   email: { label: "Email", type: "email" },
   password: { label: "Password", type: "password" },

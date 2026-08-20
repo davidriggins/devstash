@@ -6,10 +6,12 @@ import Credentials from "next-auth/providers/credentials";
 import authConfig, {
   CREDENTIALS_PROVIDER_ID,
   EMAIL_NOT_VERIFIED_CODE,
+  RATE_LIMITED_CODE,
   credentialFields,
 } from "@/auth.config";
 import { isEmailVerificationEnabled } from "@/lib/auth/email-verification";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, rateLimitKey } from "@/lib/rate-limit";
 import { signInSchema } from "@/lib/validation/auth";
 
 /**
@@ -25,13 +27,22 @@ class EmailNotVerifiedError extends CredentialsSignin {
 }
 
 /**
+ * Thrown when the caller has spent their sign-in allowance. Safe to name for
+ * the same reason a 429 is: it describes how often *this caller* has asked,
+ * and says nothing about whether the address has an account.
+ */
+class RateLimitedError extends CredentialsSignin {
+  code = RATE_LIMITED_CODE;
+}
+
+/**
  * The real Credentials provider. It replaces the edge placeholder from
  * `auth.config.ts`, which cannot run bcrypt or reach the database.
  */
 const credentialsProvider = Credentials({
   id: CREDENTIALS_PROVIDER_ID,
   credentials: credentialFields,
-  authorize: async (credentials) => {
+  authorize: async (credentials, request) => {
     const parsed = signInSchema.safeParse(credentials);
 
     if (!parsed.success) {
@@ -39,6 +50,24 @@ const credentialsProvider = Credentials({
     }
 
     const { email, password } = parsed.data;
+
+    // Here rather than in the sign-in Server Action, because *every* caller of
+    // the credentials callback reaches this — including a direct POST to
+    // `/api/auth/callback/credentials` that never touches the form. Limiting
+    // the action alone left password guessing wide open to a five-line script.
+    //
+    // After the parse and before the lookup, so the count moves for every
+    // well-formed attempt and a refusal never reveals whether the account is
+    // real.
+    const limit = await checkRateLimit(
+      "signIn",
+      rateLimitKey(request.headers, email)
+    );
+
+    if (!limit.success) {
+      throw new RateLimitedError();
+    }
+
     const user = await prisma.user.findUnique({ where: { email } });
 
     // GitHub-only accounts have no password, so they can't sign in this way
