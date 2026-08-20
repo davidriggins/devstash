@@ -89,6 +89,15 @@ Example v4 configuration:
 - Return `{ success, data, error }` pattern from actions
 - Display user-friendly error messages via toast
 
+## Testing
+
+- Vitest in a Node environment — server actions and utilities only, no component tests
+- Colocate as `*.test.ts` beside the module under test
+- Import `describe`/`it`/`expect` from `vitest`; globals are not enabled
+- Mock `@/lib/prisma`, `@/auth` and `@/lib/db/*` — no test touches a database
+- Prefer testing behaviour that would be expensive to rediscover: validation rules,
+  parsing of untrusted input, auth branches, and past regressions
+
 ## Code Quality
 
 - No commented-out code unless specified

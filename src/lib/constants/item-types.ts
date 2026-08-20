@@ -23,9 +23,17 @@ export type ItemTypeName = keyof typeof ITEM_TYPE_ICONS;
 
 export const ITEM_TYPE_NAMES = Object.keys(ITEM_TYPE_ICONS) as ItemTypeName[];
 
-/** Narrows a type name read from the database to one we have UI constants for */
+/**
+ * Narrows a type name read from the database to one we have UI constants for.
+ *
+ * `Object.hasOwn` rather than `in`, and for the same reason `itemTypeFromSlug`
+ * uses a Map: `in` walks the prototype chain, so a type named `constructor` or
+ * `toString` would pass and then index `ITEM_TYPE_ICONS` to something that is
+ * not a component. Unreachable while only the seeded system types exist, but
+ * this narrows a value read straight from the database.
+ */
 export function isItemTypeName(name: string): name is ItemTypeName {
-  return name in ITEM_TYPE_ICONS;
+  return Object.hasOwn(ITEM_TYPE_ICONS, name);
 }
 
 /** Types only available on the Pro plan */
