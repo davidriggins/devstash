@@ -15,7 +15,7 @@ This is the common workflow that we will use for every single feature/fix:
 1. **Document** - Document the feature in @context/current-feature.md.
 2. **Branch** - Create new branch for feature, fix, etc
 3. **Implement** - Implement the feature/fix that I create in @context/current-feature.md
-4. **Test** - Verify it works in the browser. Implement unit testing later. Run `npm run build` and fix any errors
+4. **Test** - Write unit tests for any server action or utility the change touches, and run `npm run test`. Verify the UI in the browser — components are not unit tested. Run `npm run build` and fix any errors
 5. **Iterate** - Iterate and change things if needed
 6. **Commit** - Only after build passes and everything works
 7. **Merge** - Merge to main
@@ -24,6 +24,21 @@ This is the common workflow that we will use for every single feature/fix:
 10. Mark as completed in @context/current-feature.md and add to history
 
 Do NOT commit without permission and until the build passes. If build fails, fix the issues first.
+
+## Testing
+
+Vitest, running in Node. Unit tests cover **server actions and utilities only** — no
+component tests, no jsdom. Components are verified in the browser, which is where their
+real failures show up anyway.
+
+- Tests sit next to the code as `*.test.ts` (`src/lib/foo.ts` → `src/lib/foo.test.ts`)
+- Import from `vitest` explicitly rather than enabling globals
+- **Nothing may reach a database.** `vitest.setup.ts` clears `DATABASE_URL`, so an
+  unmocked Prisma import fails loudly instead of connecting. Mock `@/lib/prisma`,
+  `@/auth` and `@/lib/db/*` in action tests
+- Write the test that reproduces a bug before fixing it, so the fix has a witness
+- Worth testing: input validation, anything parsing untrusted input (route params,
+  query strings, env vars), auth branching, and the shape of what an action writes
 
 ## Branching
 
