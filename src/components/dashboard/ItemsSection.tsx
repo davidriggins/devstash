@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 
-import { ItemRow } from "@/components/dashboard/ItemRow";
 import { SectionHeading } from "@/components/dashboard/SectionHeading";
+import { ItemCard } from "@/components/items/ItemCard";
 import type { DashboardItem } from "@/types/dashboard";
 
 export function ItemsSection({
@@ -20,7 +20,7 @@ export function ItemsSection({
       <SectionHeading title={title} icon={icon} />
       <div className="space-y-3">
         {items.map((item) => (
-          <ItemRow key={item.id} item={item} />
+          <ItemCard key={item.id} item={item} />
         ))}
       </div>
     </section>

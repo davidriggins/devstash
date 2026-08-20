@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Pin, Star } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,19 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 });
 
-export function ItemRow({ item }: { item: DashboardItem }) {
+/**
+ * One item, styled entirely from its own type. It sets no width and no layout
+ * container of its own, so the parent decides how these sit: the dashboard
+ * stacks them, the type pages lay them out in a grid.
+ */
+export function ItemCard({
+  item,
+  actions,
+}: {
+  item: DashboardItem;
+  /** Favorite, pin and delete controls, once those exist */
+  actions?: ReactNode;
+}) {
   const typeName = item.type;
   const Icon = ITEM_TYPE_ICONS[typeName];
 
@@ -46,9 +59,14 @@ export function ItemRow({ item }: { item: DashboardItem }) {
           )}
         </div>
 
-        <p className="mt-1 truncate text-sm text-muted-foreground">
-          {item.description}
-        </p>
+        {/* Clamped rather than truncated: a grid column is narrow enough that
+            one line loses most of the description. Guarded because the column
+            is nullable, and an empty <p> would still take its margin. */}
+        {item.description && (
+          <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+            {item.description}
+          </p>
+        )}
 
         {item.tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -61,12 +79,15 @@ export function ItemRow({ item }: { item: DashboardItem }) {
         )}
       </div>
 
-      <time
-        dateTime={item.createdAt.toISOString()}
-        className="shrink-0 text-xs text-muted-foreground"
-      >
-        {dateFormatter.format(item.createdAt)}
-      </time>
+      <div className="flex shrink-0 items-center gap-2">
+        {actions}
+        <time
+          dateTime={item.createdAt.toISOString()}
+          className="text-xs text-muted-foreground"
+        >
+          {dateFormatter.format(item.createdAt)}
+        </time>
+      </div>
     </article>
   );
 }
