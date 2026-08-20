@@ -1,16 +1,47 @@
-# Current Feature
+# Current Feature: Rate Limiting for Auth
+
+Spec: @context/features/rate-limiting-spec.md
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Rate-limit the authentication surface against brute force, credential stuffing and abuse of the email-sending endpoints
+- Add a reusable `src/lib/rate-limit.ts` built on Upstash Redis via `@upstash/ratelimit`, using a sliding window and returning `{ success, remaining, reset }`
+- Key each limit by IP — from `x-forwarded-for` on Vercel — combined with the email where the spec calls for it
+- Apply the per-endpoint limits from the spec table:
+  - credentials login — 5 per 15 min, by IP + email
+  - `/api/auth/register` — 3 per hour, by IP
+  - `/api/auth/forgot-password` — 3 per hour, by IP
+  - `/api/auth/reset-password` — 5 per 15 min, by IP
+  - `/api/auth/resend-verification` — 3 per 15 min, by IP + email
+- Answer a blocked request with 429, a `Retry-After` header, and `{ error: "Too many attempts. Please try again in X minutes." }`
+- Surface the 429 to the user as a toast
+- Fail **open** — if Upstash is unreachable, allow the request through
 
 ## Notes
 
-<!-- Any extra notes -->
+From the spec:
+
+- Upstash's free tier allows 10k requests/day, which is ample for auth limiting
+- Failing open is a deliberate availability-over-security tradeoff
+- Login limiting is awkward under NextAuth credentials and may need a custom handler
+- Rate-limiting middleware is explicitly deferred, not part of this feature
+
+Checked against the codebase while loading:
+
+- **Env vars are already in place.** `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` exist in both `.env` and `.env.production`. Both files are gitignored, so production's values still have to be set in Vercel.
+- **Both packages are new.** Neither `@upstash/ratelimit` nor `@upstash/redis` is in `package.json`.
+- **Login has no route handler of ours to wrap.** `signInWithCredentials` in `src/actions/auth.ts` is a Server Action calling NextAuth's `signIn()`; nothing fetches `/api/auth/callback/credentials` directly. The limit has to sit in that action or in `authorize` — which also means the 429 cannot be an HTTP response there and has to come back as an action return value.
+- **Interacts with a known open issue.** The forgot-password timing oracle recorded in History — an existing address does more work before replying than an unknown one — is affected by where the limit check runs. Not fixed here.
+
+Decisions taken at load:
+
+- **Out of scope: `/api/auth/change-password` and `/api/auth/verify-email`.** Both are live auth routes the spec's table omits (it predates them), and both are plausible targets — change-password does a `bcrypt.compare`, verify-email consumes a bearer token. Deliberately excluded from this feature; worth a follow-up.
+- **Keep both limiting layers.** The existing `hasRecentVerificationToken` / `hasRecentPasswordResetToken` cooldowns are *not* rate limits — on a hit they skip the send and return the same generic 200, so they protect the inbox owner, keyed by email, for 60s. The new Upstash limits protect our own infrastructure and Resend quota, keyed by IP, and reject with 429. Each covers the other's blind spot: the email cooldown does nothing against one attacker spraying a thousand addresses, and the IP limit does nothing against a botnet burying one real inbox. Keeping both also matters because these limits **fail open** — if Upstash is unreachable and it were the only control, a real address could be mail-bombed freely, whereas the DB cooldown cannot fail open since the request already needs the database.
+- **Ordering constraint that follows from that:** the Upstash check runs **after the Zod parse and before the account lookup**, and increments unconditionally. Counting only requests that reach a real account would make a 429 proof the address exists — precisely the disclosure the generic responses exist to prevent. So: parse (cheap, no DB) → rate limit → everything else.
 
 ## History
 

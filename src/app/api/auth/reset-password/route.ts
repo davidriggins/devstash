@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 
 import { hashPassword } from "@/lib/auth/password";
 import { consumePasswordResetToken } from "@/lib/auth/password-reset-token";
+import {
+  checkRateLimit,
+  rateLimitKey,
+  rateLimitResponse,
+} from "@/lib/rate-limit";
 import { resetPasswordSchema } from "@/lib/validation/auth";
 
 /**
@@ -42,6 +47,17 @@ export async function POST(request: Request) {
       },
       { status: 400 }
     );
+  }
+
+  // Before the claim, so guessing at tokens costs the guesser their allowance
+  // whether or not the token turns out to exist
+  const limit = await checkRateLimit(
+    "resetPassword",
+    rateLimitKey(request.headers)
+  );
+
+  if (!limit.success) {
+    return rateLimitResponse(limit);
   }
 
   const { token, password } = parsed.data;
