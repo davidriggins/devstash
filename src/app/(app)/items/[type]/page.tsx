@@ -81,7 +81,12 @@ export default async function ItemsByTypePage({
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        // Three columns at `xl`, not `lg` like the dashboard's collections
+        // grid. The sidebar takes ~256px, so `lg` leaves about 230px a card,
+        // and an ItemCard is laid out horizontally — at that width its title
+        // truncates to "Docker Co…" and its tags stack one per line. A
+        // collection card is vertical and survives 230px; this one does not.
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {items.map((item) => (
             <ItemCard key={item.id} item={item} />
           ))}
