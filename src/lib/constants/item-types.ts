@@ -103,3 +103,20 @@ export const ITEM_TYPE_SLUGS = {
 export function getItemTypeHref(name: ItemTypeName) {
   return `/items/${ITEM_TYPE_SLUGS[name]}`;
 }
+
+/**
+ * Derived from ITEM_TYPE_SLUGS so the two directions cannot drift apart.
+ *
+ * A Map rather than a plain object, and that is not a style choice: the slug
+ * comes from the URL, and a plain-object lookup walks the prototype chain, so
+ * `"constructor"` and `"__proto__"` would answer with something truthy that a
+ * `?? null` fallback never catches. A Map has no such inherited keys.
+ */
+const ITEM_TYPE_NAMES_BY_SLUG = new Map<string, ItemTypeName>(
+  ITEM_TYPE_NAMES.map((name) => [ITEM_TYPE_SLUGS[name], name] as const)
+);
+
+/** Narrows an untrusted `[type]` route segment to a known type, or null */
+export function itemTypeFromSlug(slug: string): ItemTypeName | null {
+  return ITEM_TYPE_NAMES_BY_SLUG.get(slug) ?? null;
+}

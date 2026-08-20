@@ -1,5 +1,9 @@
 import { getCurrentUserId } from "@/lib/db/user";
-import { ITEM_TYPE_NAMES, isItemTypeName } from "@/lib/constants/item-types";
+import {
+  ITEM_TYPE_NAMES,
+  isItemTypeName,
+  type ItemTypeName,
+} from "@/lib/constants/item-types";
 import { prisma } from "@/lib/prisma";
 import type { DashboardItem, SidebarItemType } from "@/types/dashboard";
 
@@ -68,6 +72,28 @@ export async function getRecentItems(limit: number): Promise<DashboardItem[]> {
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: limit,
+    select: ITEM_SELECT,
+  });
+
+  return items.map(toDashboardItem);
+}
+
+/** Every item of one system type for the current user, newest first */
+export async function getItemsByType(
+  type: ItemTypeName
+): Promise<DashboardItem[]> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return [];
+  }
+
+  const items = await prisma.item.findMany({
+    // `isSystem` is not decoration: type names are unique per (name, userId),
+    // so a user could own a custom type also called "snippet", and its items
+    // do not belong on the system snippet page
+    where: { userId, itemType: { name: type, isSystem: true } },
+    orderBy: { createdAt: "desc" },
     select: ITEM_SELECT,
   });
 

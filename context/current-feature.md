@@ -1,16 +1,82 @@
-# Current Feature
+# Current Feature: Items List View
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Add the dynamic route `/items/[type]`, serving all seven types from one page
+  (`/items/snippets`, `/items/prompts`, `/items/commands`, `/items/notes`,
+  `/items/files`, `/items/images`, `/items/links`)
+- Resolve the URL slug back to a type name; an unknown slug is a 404, not a fallback
+- Fetch the current user's items filtered by that type, newest first
+- Render them as a responsive grid of `ItemCard` components — one column on small
+  screens, two on medium and up
+- Give each card a left border in its item type's color
+- Show an empty state when the type holds nothing
+- Follow the existing patterns: query in `lib/db`, called directly from a server
+  component; no new npm dependencies
 
 ## Notes
 
-<!-- Any extra notes -->
+Read-only. No create, update or delete in this spec — see
+@docs/item-crud-architecture.md for how mutations are meant to land later.
+
+**Prerequisites the research turned up:**
+
+- `ITEM_TYPE_SLUGS` in `src/lib/constants/item-types.ts` is **one-way** (name → slug).
+  The route needs the reverse lookup, e.g. an `itemTypeFromSlug()` helper alongside it.
+- `src/proxy.ts` matches only `/dashboard` and `/profile`. Without `/items/:path*`
+  these pages are reachable signed out — they would render empty rather than leak,
+  since `getCurrentUserId()` returns null, but that is an accident of the query layer,
+  not a guard.
+
+**Constraints:**
+
+- The sidebar already links to all seven `/items/<slug>` URLs via `getItemTypeHref()`,
+  and every one is a 404 today. This feature makes all seven live at once.
+- Put the route in the existing `(app)` group so it inherits the sidebar and top bar
+  from `src/app/(app)/layout.tsx` at no cost. Route groups add no path segment.
+- `params` is a Promise in Next 16 and must be awaited. `PageProps<"/items/[type]">`
+  is generated once the route file exists.
+- `force-dynamic`, like `/dashboard` and `/profile` — this reads live per-user state.
+- Filter by type through the relation with `isSystem: true` in the where clause. Names
+  are unique per `(name, userId)`, so once custom types exist a user could own a type
+  also called `snippet` and their items would otherwise appear on the system page.
+- `getItemsByType` should return `[]` when `getCurrentUserId()` is null, matching every
+  existing function in `src/lib/db/`.
+
+**`ItemCard` is the existing `ItemRow`, moved — decided, not open.** Do not write a
+second component. `src/components/dashboard/ItemRow.tsx` already renders
+`rounded-xl border-l-4 bg-card p-4 ring-1` with the type-colored left border this spec
+asks for, the tinted icon tile, and four of the six lookup tables already wired. It
+sets **no width and no layout container of its own** — the dashboard supplies
+`space-y-3`, this page supplies `grid gap-4 md:grid-cols-2`. Row versus card is the
+parent's decision; the child is identical either way, so there is nothing to fork.
+
+Duplicating would mean two files importing `ITEM_TYPE_ACCENT_CLASSES`,
+`ITEM_TYPE_BG_CLASSES`, `ITEM_TYPE_TEXT_CLASSES` and `ITEM_TYPE_ICONS`, kept visually
+in sync by hand — the failure the constants tables exist to prevent.
+
+The work:
+
+- Move `src/components/dashboard/ItemRow.tsx` → `src/components/items/ItemCard.tsx`,
+  renaming the component, and update the import in
+  `src/components/dashboard/ItemsSection.tsx`. The dashboard keeps using it unchanged.
+- Description goes from `truncate` to `line-clamp-2` — better in a narrow grid column,
+  and an improvement on the dashboard too.
+- Leave an `actions` slot (a `ReactNode` prop defaulting to nothing) for the future
+  favorite / pin / delete controls, so the CRUD feature does not have to reopen this.
+
+Revisit only if the card later needs a content preview the dashboard row must not show
+— a code excerpt or an image thumbnail. Plausible, but speculative today; a `preview`
+prop or a split at that point is cheap. Do not pre-pay for it.
+
+**Empty states matter more than usual here.** On the development branch, `note`, `file`
+and `image` hold **zero** items, so three of the seven pages are empty on arrival even
+for the demo account. Files and Images are also Pro-only and have no gating anywhere in
+the codebase yet; this spec does not add any.
 
 ## History
 

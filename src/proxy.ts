@@ -19,5 +19,15 @@ export const proxy = auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*", "/profile", "/profile/:path*"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/:path*",
+    "/profile",
+    "/profile/:path*",
+    // Signed out, these would render empty rather than leak — `getCurrentUserId`
+    // returns null and every query answers with nothing. That is a property of
+    // the query layer, though, not a guard, so the guard goes here too
+    "/items",
+    "/items/:path*",
+  ],
 };
