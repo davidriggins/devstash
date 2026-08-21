@@ -12,6 +12,54 @@ export interface DashboardItem {
   tags: string[];
 }
 
+/** A collection an item belongs to, as the detail drawer lists it */
+export interface ItemDetailCollection {
+  id: string;
+  name: string;
+}
+
+/**
+ * One item's full record, shaped by `getItemById` for the detail drawer.
+ *
+ * Deliberately separate from `DashboardItem` rather than widening it: the list
+ * queries read every item a user owns, and a `content` column they never render
+ * is paid for on every row.
+ */
+export interface ItemDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  /** TEXT types only */
+  content: string | null;
+  /** URL types only */
+  url: string | null;
+  /** FILE types only */
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  /** Drives syntax highlighting once the code editor lands */
+  language: string | null;
+  isFavorite: boolean;
+  isPinned: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  type: ItemTypeName;
+  tags: string[];
+  collections: ItemDetailCollection[];
+}
+
+/**
+ * `ItemDetail` as it survives `JSON.stringify` on the way through the API
+ * route — `Date` becomes an ISO string and has to be revived on the client.
+ */
+export type SerializedItemDetail = Omit<
+  ItemDetail,
+  "createdAt" | "updatedAt"
+> & {
+  createdAt: string;
+  updatedAt: string;
+};
+
 /** The signed-in user as the sidebar shows them, taken from the session */
 export interface SidebarUserProfile {
   name: string | null;

@@ -24,10 +24,13 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 export function ItemCard({
   item,
   actions,
+  onSelect,
 }: {
   item: DashboardItem;
   /** Favorite, pin and delete controls, once those exist */
   actions?: ReactNode;
+  /** Opens the detail drawer. Omitted, the card is not interactive. */
+  onSelect?: () => void;
 }) {
   const typeName = item.type;
   const Icon = ITEM_TYPE_ICONS[typeName];
@@ -35,10 +38,24 @@ export function ItemCard({
   return (
     <article
       className={cn(
-        "flex items-start gap-4 rounded-xl border-l-4 bg-card p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted/40",
+        "relative flex items-start gap-4 rounded-xl border-l-4 bg-card p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring",
         ITEM_TYPE_ACCENT_CLASSES[typeName]
       )}
     >
+      {/* Stretched over the whole card rather than wrapping it: a <button> may
+          only contain phrasing content, so the heading, paragraph and badges
+          could not live inside one. This also leaves the actions slot free to
+          hold its own buttons, which nesting would have made invalid. */}
+      {onSelect && (
+        <button
+          type="button"
+          onClick={onSelect}
+          className="absolute inset-0 z-0 cursor-pointer rounded-xl outline-none"
+        >
+          <span className="sr-only">Open {item.title}</span>
+        </button>
+      )}
+
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-xl",
@@ -79,7 +96,8 @@ export function ItemCard({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      {/* Above the stretched button, so the controls it will hold stay clickable */}
+      <div className="relative z-10 flex shrink-0 items-center gap-2">
         {actions}
         <time
           dateTime={item.createdAt.toISOString()}
