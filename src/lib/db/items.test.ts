@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 vi.mock("@/lib/db/user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    item: { findFirst: vi.fn(), update: vi.fn() },
+    item: { findFirst: vi.fn(), update: vi.fn(), deleteMany: vi.fn() },
     // The real one runs the callback against a transaction client; handing back
     // the same mock keeps `tx.item.*` pointing at the spies asserted on below
     $transaction: vi.fn(),
@@ -17,7 +17,7 @@ vi.mock("@/lib/prisma", () => ({
 
 const { getCurrentUserId } = await import("@/lib/db/user");
 const { prisma } = await import("@/lib/prisma");
-const { getItemById, updateItem } = await import("@/lib/db/items");
+const { deleteItem, getItemById, updateItem } = await import("@/lib/db/items");
 
 /**
  * Untyped on purpose. `findFirst`'s own signature promises the full `Item`
@@ -27,6 +27,7 @@ const { getItemById, updateItem } = await import("@/lib/db/items");
  */
 const findFirst = prisma.item.findFirst as unknown as Mock;
 const update = prisma.item.update as unknown as Mock;
+const deleteMany = prisma.item.deleteMany as unknown as Mock;
 const transaction = prisma.$transaction as unknown as Mock;
 
 const USER_ID = "user_1";
@@ -57,6 +58,7 @@ beforeEach(() => {
   vi.mocked(getCurrentUserId).mockReset().mockResolvedValue(USER_ID);
   findFirst.mockReset().mockResolvedValue(itemRecord());
   update.mockReset().mockResolvedValue(itemRecord());
+  deleteMany.mockReset().mockResolvedValue({ count: 1 });
   transaction.mockReset().mockImplementation((run: (tx: unknown) => unknown) =>
     run(prisma)
   );
@@ -272,5 +274,52 @@ describe("updateItem", () => {
     expect(saved?.title).toBe("Renamed");
     expect(saved?.tags).toEqual(["react"]);
     expect(saved?.collections).toEqual([{ id: "col_1", name: "React Patterns" }]);
+  });
+});
+
+describe("deleteItem", () => {
+  /**
+   * Same rule as `getItemById`: signed out, the answer must not depend on the
+   * id, so no statement is issued at all.
+   */
+  it("issues no query and reports nothing deleted when nobody is signed in", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    await expect(deleteItem("item_1")).resolves.toBe(false);
+    expect(deleteMany).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The whole ownership check. A `where` of `{ id }` alone would delete another
+   * user's item, and there is no second guard anywhere behind this one.
+   */
+  it("scopes the delete to the signed-in user", async () => {
+    await deleteItem("item_1");
+
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: "item_1", userId: USER_ID },
+    });
+  });
+
+  it("reports true when a row went", async () => {
+    deleteMany.mockResolvedValue({ count: 1 });
+
+    await expect(deleteItem("item_1")).resolves.toBe(true);
+  });
+
+  /** Missing and not-yours are the same count, which is the point */
+  it("reports false when nothing matched", async () => {
+    deleteMany.mockResolvedValue({ count: 0 });
+
+    await expect(deleteItem("item_1")).resolves.toBe(false);
+  });
+
+  /** The id comes from the browser; it is scoped, never sanitised or reshaped */
+  it("passes the id through untouched", async () => {
+    await deleteItem("  weird/id?  ");
+
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { id: "  weird/id?  ", userId: USER_ID },
+    });
   });
 });
