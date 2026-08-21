@@ -5,7 +5,11 @@ import {
   type ItemTypeName,
 } from "@/lib/constants/item-types";
 import { prisma } from "@/lib/prisma";
-import type { DashboardItem, SidebarItemType } from "@/types/dashboard";
+import type {
+  DashboardItem,
+  ItemDetail,
+  SidebarItemType,
+} from "@/types/dashboard";
 
 const ITEM_SELECT = {
   id: true,
@@ -98,6 +102,69 @@ export async function getItemsByType(
   });
 
   return items.map(toDashboardItem);
+}
+
+const ITEM_DETAIL_SELECT = {
+  ...ITEM_SELECT,
+  content: true,
+  url: true,
+  fileUrl: true,
+  fileName: true,
+  fileSize: true,
+  language: true,
+  updatedAt: true,
+  // Sorted for the same reason the tags are: stable badge order between renders
+  collections: {
+    select: { collection: { select: { id: true, name: true } } },
+    orderBy: { collection: { name: "asc" } },
+  },
+} as const;
+
+interface ItemDetailRecord extends ItemRecord {
+  content: string | null;
+  url: string | null;
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
+  language: string | null;
+  updatedAt: Date;
+  collections: { collection: { id: string; name: string } }[];
+}
+
+/**
+ * One item in full, or null when it does not exist, is not this user's, or
+ * nobody is signed in.
+ *
+ * The ownership check is part of the `where` rather than a test on the result:
+ * another user's item is simply not found, so there is no branch that could
+ * return it and no way for the caller to tell the two cases apart. That is the
+ * point — a "forbidden" answer would confirm the id exists.
+ */
+export async function getItemById(id: string): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return null;
+  }
+
+  const item: ItemDetailRecord | null = await prisma.item.findFirst({
+    where: { id, userId },
+    select: ITEM_DETAIL_SELECT,
+  });
+
+  if (!item) {
+    return null;
+  }
+
+  const { itemType, tags, collections, ...rest } = item;
+
+  return {
+    ...rest,
+    // Same fallback as the cards: custom types are not built yet
+    type: isItemTypeName(itemType.name) ? itemType.name : "note",
+    tags: tags.map((tag) => tag.name),
+    collections: collections.map(({ collection }) => collection),
+  };
 }
 
 /**

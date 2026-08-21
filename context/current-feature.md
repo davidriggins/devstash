@@ -1,16 +1,53 @@
-# Current Feature
+# Current Feature: Item Drawer
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Right-side slide-in drawer (shadcn `Sheet`) that opens when an `ItemCard` is clicked. This is the item detail view — there is **no** separate item page.
+- Works on both the dashboard (`ItemsSection`) and the items list pages (`/items/[type]`).
+- Header: type icon tile, title, type badge and language badge (see screenshot).
+- Action bar: Favorite (star, yellow when active), Pin, Copy, then Edit (pencil) and Delete (trash) right-aligned.
+- Body sections: Description, Content, Tags, Collections, Details (Created / Updated dates).
+- Card data (title, description, tags…) stays server-fetched as today; full detail (content, collections, language, updatedAt) is fetched **on click** from `GET /api/items/[id]`.
+- New query function in `src/lib/db/items.ts`; the API route calls it with an auth check.
+- Drawer shows a skeleton while fetching. No page navigation — should feel snappy.
+- Client wrapper component owns the drawer state, since both pages are server components.
 
 ## Notes
 
-<!-- Any extra notes -->
+**Scope guard.** Display only. The action bar buttons are rendered but not wired
+— favorite/pin toggles, copy, edit and delete all belong to the CRUD feature.
+The syntax-highlighted code editor in the screenshot also comes later; content
+renders as plain preformatted text for now.
+
+**Sheet is not installed.** `src/components/ui/` has no `sheet.tsx` — it comes
+from the shadcn CLI. This project is on the Base UI variant (see `alert-dialog`,
+which needed no new npm dependency because Base UI was already installed);
+expect the same here, but check what the CLI actually pulls in.
+
+**The wrapper is the design decision.** `ItemCard` is a server-safe presentational
+component shared by two pages, and the previous feature deliberately kept layout
+out of it — the parent decides rows vs grid. Selection state should follow the
+same rule: a `"use client"` wrapper holds the open item id and renders the
+drawer, and the card stays as dumb as it is now. Making `ItemCard` itself a
+client component would drag both pages' item lists across the boundary.
+
+**Fetch shape.** `DashboardItem` in `src/types/dashboard.ts` is the card shape;
+the drawer needs a wider one (content, url, fileUrl/fileName/fileSize, language,
+collections, updatedAt). New type rather than widening `DashboardItem`, or every
+list query pays for columns no card shows.
+
+**Auth.** `getItemsByType` and friends scope through `getCurrentUserId()` and
+return `[]` when it is null. The route must do the equivalent for a single id:
+an item belonging to another user has to 404, not 403 — a 403 confirms the id
+exists. Route params are untrusted input, which the testing conventions call out
+explicitly, so that is where the unit tests go (`src/lib/db/items.test.ts` and/or
+the route), alongside the existing 63.
+
+**Reference:** `context/screenshots/dashboard-ui-drawer.png`.
 
 ## History
 

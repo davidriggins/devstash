@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { ItemCard } from "@/components/items/ItemCard";
+import { ItemList } from "@/components/items/ItemList";
 import {
   ITEM_TYPE_BG_CLASSES,
   ITEM_TYPE_ICONS,
@@ -86,11 +86,10 @@ export default async function ItemsByTypePage({
         // and an ItemCard is laid out horizontally — at that width its title
         // truncates to "Docker Co…" and its tags stack one per line. A
         // collection card is vertical and survives 230px; this one does not.
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => (
-            <ItemCard key={item.id} item={item} />
-          ))}
-        </div>
+        <ItemList
+          items={items}
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+        />
       )}
     </div>
   );

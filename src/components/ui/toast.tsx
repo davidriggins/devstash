@@ -22,7 +22,12 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto w-auto max-w-sm outline-none sm:right-4 sm:left-auto sm:mx-0 sm:w-full",
+        // z-[60], not the stock z-50: every overlay in the project (sheet,
+        // alert dialog, dropdown) is z-50, and portals appended later win a
+        // tie — so a toast raised from inside the item drawer rendered behind
+        // the panel and was simply never seen. A toast is the topmost
+        // transient layer by definition and has to outrank all of them.
+        "pointer-events-none fixed inset-x-4 bottom-4 z-[60] mx-auto w-auto max-w-sm outline-none sm:right-4 sm:left-auto sm:mx-0 sm:w-full",
         className
       )}
       {...props}
