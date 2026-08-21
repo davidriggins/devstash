@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CODE_ITEM_TYPES,
   CREATABLE_ITEM_TYPES,
   getItemTypeHref,
+  hasEditableField,
   isCreatableItemType,
   isItemTypeName,
   isProItemType,
@@ -10,6 +12,7 @@ import {
   ITEM_TYPE_CONTENT_TYPES,
   ITEM_TYPE_NAMES,
   ITEM_TYPE_SLUGS,
+  usesCodeEditor,
 } from "@/lib/constants/item-types";
 
 describe("itemTypeFromSlug", () => {
@@ -159,6 +162,43 @@ describe("isCreatableItemType", () => {
     ]) {
       expect(isCreatableItemType(name)).toBe(false);
     }
+  });
+});
+
+describe("usesCodeEditor", () => {
+  /**
+   * Which types get Monaco instead of a textarea. Pinned by name because the
+   * spec named them: everything else — prose, links, uploads — keeps the plain
+   * control.
+   */
+  it("is snippet and command, and nothing else", () => {
+    expect(CODE_ITEM_TYPES).toEqual(["snippet", "command"]);
+
+    for (const name of ITEM_TYPE_NAMES) {
+      expect(usesCodeEditor(name)).toBe(name === "snippet" || name === "command");
+    }
+  });
+
+  /**
+   * Derived rather than listed, so state the property as well as the result: a
+   * code type is one that stores a language next to its content. A future type
+   * that does the same is picked up without anyone editing this table.
+   */
+  it("is exactly the types that store a language alongside content", () => {
+    for (const name of ITEM_TYPE_NAMES) {
+      const isCode =
+        hasEditableField(name, "content") && hasEditableField(name, "language");
+
+      expect(usesCodeEditor(name)).toBe(isCode);
+    }
+  });
+
+  /** A prompt and a note carry content, and must keep the textarea */
+  it("leaves prose types with content on the plain control", () => {
+    expect(hasEditableField("prompt", "content")).toBe(true);
+    expect(hasEditableField("note", "content")).toBe(true);
+    expect(usesCodeEditor("prompt")).toBe(false);
+    expect(usesCodeEditor("note")).toBe(false);
   });
 });
 
