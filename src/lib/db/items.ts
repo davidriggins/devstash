@@ -239,6 +239,33 @@ export async function updateItem(
 }
 
 /**
+ * Deletes one item, reporting whether a row actually went. `false` covers the
+ * same three cases the two functions above collapse: no such item, not this
+ * user's, or nobody signed in.
+ *
+ * `deleteMany` rather than `delete` — `delete` throws `P2025` when the row is
+ * missing, so telling "already gone" from "the database fell over" would mean
+ * catching a Prisma error code. A count says it plainly. It also takes a plain
+ * filter, so ownership sits in the `where` here exactly as it does everywhere
+ * else in this file.
+ *
+ * Nothing else needs deleting: `ItemCollection` cascades from the item, and so
+ * does the implicit `_ItemTags` join. The shared `Tag` rows are deliberately
+ * left alone — an orphaned tag belongs to a cleanup job, not to this.
+ */
+export async function deleteItem(id: string): Promise<boolean> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return false;
+  }
+
+  const { count } = await prisma.item.deleteMany({ where: { id, userId } });
+
+  return count > 0;
+}
+
+/**
  * The system item types in canonical order, each with the current user's item
  * count. Types the UI has no constants for are skipped.
  */

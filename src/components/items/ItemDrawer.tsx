@@ -8,9 +8,10 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Copy, Pencil, Pin, Star, Trash2, X } from "lucide-react";
+import { Copy, Pencil, Pin, Star, X } from "lucide-react";
 
 import { updateItem } from "@/actions/items";
+import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -249,6 +250,21 @@ export function ItemDrawer({
     });
   }
 
+  /**
+   * Runs after the row is gone, in this order: close the drawer, say so, then
+   * refresh. The toast outlives the close because `Toaster` sits at the root,
+   * and the refresh is what removes the card the drawer was opened from.
+   *
+   * `result` still holds the deleted record afterwards, and `selected` in
+   * `ItemList` still points at it — both harmless. The panel is closing, and
+   * once the refresh lands there is no card left to reopen it from.
+   */
+  function handleDeleted() {
+    onOpenChange(false);
+    toast.add({ title: "Item deleted", type: "success" });
+    router.refresh();
+  }
+
   function updateField(field: keyof EditForm, value: string) {
     setForm((current) => (current ? { ...current, [field]: value } : current));
   }
@@ -396,17 +412,14 @@ export function ItemDrawer({
                       Edit
                     </Button>
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      disabled
-                      title="Deleting is coming soon"
-                      className="text-destructive"
-                    >
-                      <Trash2 className="size-4" />
-                      <span className="sr-only">Delete</span>
-                    </Button>
+                    {/* Unlike Edit, this needs nothing the fetch is waiting
+                        for — the id and the title both came in on the card, so
+                        it stays usable while the body is still a skeleton */}
+                    <DeleteItemDialog
+                      itemId={item.id}
+                      title={title}
+                      onDeleted={handleDeleted}
+                    />
                   </div>
                 </div>
               )}

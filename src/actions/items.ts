@@ -1,7 +1,10 @@
 "use server";
 
 import { getCurrentUserId } from "@/lib/db/user";
-import { updateItem as updateItemRecord } from "@/lib/db/items";
+import {
+  deleteItem as deleteItemRecord,
+  updateItem as updateItemRecord,
+} from "@/lib/db/items";
 import { updateItemSchema } from "@/lib/validation/items";
 import type { ItemDetail } from "@/types/dashboard";
 
@@ -11,6 +14,14 @@ export interface UpdateItemResult {
   data?: ItemDetail;
   error?: string;
 }
+
+export interface DeleteItemResult {
+  success: boolean;
+  error?: string;
+}
+
+/** Shown for a gone item and for one that was never this user's alike */
+const MISSING_ITEM_MESSAGE = "This item no longer exists";
 
 /**
  * Saves the drawer's edit form.
@@ -57,7 +68,7 @@ export async function updateItem(
     if (!item) {
       // Missing and not-yours collapse into one answer, matching the detail
       // route. Telling them apart would confirm an id exists to anyone guessing.
-      return { success: false, error: "This item no longer exists" };
+      return { success: false, error: MISSING_ITEM_MESSAGE };
     }
 
     return { success: true, data: item };
@@ -65,5 +76,39 @@ export async function updateItem(
     console.error("Updating item failed:", error);
 
     return { success: false, error: "Could not save this item. Try again." };
+  }
+}
+
+/**
+ * Deletes one item, permanently. There is no undo.
+ *
+ * Same shape of guards as `updateItem`, and for the same reasons: the id comes
+ * from the browser, so it is checked here and scoped to the signed-in user at
+ * the query. Nothing comes back on success — the item is gone, and the caller
+ * knows which one it asked about.
+ */
+export async function deleteItem(itemId: string): Promise<DeleteItemResult> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return { success: false, error: "You are not signed in" };
+  }
+
+  if (typeof itemId !== "string" || itemId.trim() === "") {
+    return { success: false, error: "Could not delete this item. Try again." };
+  }
+
+  try {
+    const deleted = await deleteItemRecord(itemId);
+
+    if (!deleted) {
+      return { success: false, error: MISSING_ITEM_MESSAGE };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Deleting item failed:", error);
+
+    return { success: false, error: "Could not delete this item. Try again." };
   }
 }

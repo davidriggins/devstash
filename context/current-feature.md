@@ -1,16 +1,159 @@
-# Current Feature
+# Current Feature: Delete Item
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Wire the drawer's `Trash2` button, which has been `disabled` with
+  `title="Deleting is coming soon"` since the drawer shipped, so it actually
+  deletes the open item.
+- Guard it with a shadcn `AlertDialog` confirmation that names the item being
+  deleted, with a destructive confirm button.
+- On success: close the confirmation, close the drawer, raise a success toast,
+  and `router.refresh()` so the cards behind catch up.
+- Add `deleteItem` as a Server Action in `src/actions/items.ts` over a
+  `deleteItem` query in `src/lib/db/items.ts`, scoped to the signed-in user.
+- Missing and not-yours collapse into one answer, matching `getItemById` and
+  `updateItem`.
+- Report failure inline in the confirmation dialog, not by silently closing it.
+- Unit tests for the new query and action; `npm run test`, `npm run lint` and
+  `npm run build` all clean.
 
 ## Notes
 
-<!-- Any extra notes -->
+### Where it lives
+
+The drawer only. `ItemCard` already has an `actions` slot (added for exactly
+this family of controls), but a per-card delete belongs with favorite and pin —
+all three are card-level toggles and they should be designed as one row, not
+one-at-a-time. This feature leaves that slot untouched. If a card-level delete
+is wanted now, say so at `start` and the scope grows by one prop.
+
+The mutation is a **Server Action**, not a `DELETE /api/items/[id]` route. The
+drawer's initial read goes through a route because it is a client fetch of a
+record; mutations from client components are Server Actions in this project, and
+`updateItem` is the precedent to match. A route is what a future mobile/CLI
+client would need, and that is not today.
+
+### The query
+
+`deleteItem(id)` in `src/lib/db/items.ts`, returning a boolean.
+
+Use `prisma.item.deleteMany({ where: { id, userId } })` and check `count === 1`,
+**not** `item.delete()`. `delete` throws `P2025` when the row is missing, which
+would mean catching a Prisma error code to tell "already gone" from "the
+database fell over" — `deleteMany` reports it as a number instead. The `where`
+is scoped to the user for the same reason `updateItem` scopes both of its
+statements: ownership is part of the query, never a check on the result.
+
+Return `false` when `getCurrentUserId()` is null, before any query runs — every
+other function in that file does the same.
+
+**No transaction is needed, and no relation cleanup.** `ItemCollection.item` is
+`onDelete: Cascade`, and the implicit `_ItemTags` join table cascades too, so the
+memberships and tag links go with the row. Shared `Tag` rows are never deleted —
+the same rule the edit write follows, and orphan cleanup is still someone else's
+job. Worth stating in a comment so nobody later adds a manual `tags: { set: [] }`
+that does nothing.
+
+### The action
+
+`deleteItem(itemId: string)` in `src/actions/items.ts`, returning
+`{ success, error? }`. Mirror `updateItem`'s shape:
+
+- signed out → `"You are not signed in"`
+- non-string or empty `itemId` → the generic failure (the id arrives from the
+  browser; TypeScript's guarantees stop at the action boundary)
+- query returned `false` → `"This item no longer exists"`, the same words
+  `updateItem` uses, because missing and not-yours must not be distinguishable
+- thrown → `console.error` the cause, return a generic message that does not
+  echo it
+
+There is nothing to return on success — no `data` field.
+
+### The confirmation
+
+`src/components/ui/alert-dialog.tsx` is **already installed** (it came in with
+the profile page's delete-account flow). No shadcn CLI run, no new npm
+dependency, no migration.
+
+Model it on `DeleteAccountDialog` for structure, but **not** for the typed
+confirmation — typing the account email is right for a destructive, irreversible
+account deletion and is far too heavy for one item. A destructive confirm button
+is the whole gate here.
+
+Copy: title along the lines of "Delete this item?", description naming the item
+("**{title}** will be permanently deleted. This cannot be undone."), Cancel and
+a destructive "Delete".
+
+Three traps to get right:
+
+1. **The trigger sits inside the drawer's `<form>`.** Every button in there is
+   already `type="button"` for this reason; the new trigger and the dialog's
+   confirm button both need it too, or they submit the edit form.
+2. **Nested overlays.** The sheet and the alert dialog are both `z-50`, so the
+   dialog only wins because its portal is appended later — the same DOM-order
+   tie that hid the Copy toast until the toast viewport went to `z-[60]`. Check
+   it with `document.elementFromPoint` at the button's centre, not by finding
+   the node in the DOM. Presence in the DOM is not visibility, which is exactly
+   how that bug was missed last time.
+3. **Toast timing.** MCP round-trip latency outruns the 5s toast timeout, so a
+   click-then-screenshot always photographs an empty screen whether or not the
+   toast worked. If a visual is wanted, raise `timeout` temporarily and revert.
+
+### The delete flow in the drawer
+
+Order matters: `router.refresh()` first or the toast last is not the same thing.
+
+1. Confirm → run the action inside a `useTransition`, with both dialog buttons
+   disabled while it is in flight.
+2. On failure, keep the dialog open and render the error inside it. Closing it
+   and dropping a red toast would put the message somewhere different from every
+   other refusal in this project, and it would vanish in 5s.
+3. On success, close the dialog, `onOpenChange(false)` the drawer, toast
+   "Item deleted", then `router.refresh()`.
+
+`selected` in `ItemList` is deliberately not cleared on close — the sheet keeps
+its children mounted while it animates out. That still holds: the drawer is
+closing, and after the refresh there is no card left to reopen it from. The
+drawer's `result` state keeps the deleted record until the next card is clicked,
+which is harmless but worth a moment's thought rather than an assumption.
+
+Delete should be **unavailable while editing** — the action bar is replaced by
+Save/Cancel in edit mode already, so this falls out for free. Confirm it does.
+
+Unlike Edit, delete does **not** need `detail` to have arrived: it only needs the
+id, which the card already carries. Leave it enabled during the skeleton.
+
+### Tests
+
+Colocated, Node, nothing reaching a database — mock `@/lib/prisma`,
+`@/lib/db/user` and `@/lib/db/items` as the existing item tests do. Currently
+116 tests across 12 files; expect roughly 12–15 more.
+
+Query (`src/lib/db/items.test.ts`):
+
+- signed out → no query issued at all, returns `false`
+- the `where` really is `{ id, userId }`, not `{ id }`
+- `count: 0` → `false`; `count: 1` → `true`
+- the raw id reaches the query unmangled
+
+Action (`src/actions/items.test.ts`):
+
+- signed out, empty/non-string id
+- query `false` → `"This item no longer exists"`, identical for missing and
+  not-yours
+- a thrown `ECONNREFUSED` becomes a generic message and is not echoed back
+
+### Known gaps to accept up front
+
+- No undo. The item is gone; the toast says so and nothing offers to bring it
+  back. A soft-delete column is a schema change and a different feature.
+- Favorite and pin stay `disabled` — still waiting on their own mutations.
+- No bulk delete, and no delete from the card.
+- Free-tier item counts are computed live, so nothing needs decrementing.
 
 ## History
 

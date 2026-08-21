@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/db/items", () => ({ updateItem: vi.fn() }));
+vi.mock("@/lib/db/items", () => ({ updateItem: vi.fn(), deleteItem: vi.fn() }));
 
 const { getCurrentUserId } = await import("@/lib/db/user");
-const { updateItem: updateItemRecord } = await import("@/lib/db/items");
-const { updateItem } = await import("@/actions/items");
+const {
+  updateItem: updateItemRecord,
+  deleteItem: deleteItemRecord,
+} = await import("@/lib/db/items");
+const { deleteItem, updateItem } = await import("@/actions/items");
 
 const USER_ID = "user_1";
 
@@ -40,6 +43,7 @@ const SAVED = {
 beforeEach(() => {
   vi.mocked(getCurrentUserId).mockReset().mockResolvedValue(USER_ID);
   vi.mocked(updateItemRecord).mockReset().mockResolvedValue(SAVED);
+  vi.mocked(deleteItemRecord).mockReset().mockResolvedValue(true);
 });
 
 describe("updateItem action", () => {
@@ -147,6 +151,74 @@ describe("updateItem action", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe("Could not save this item. Try again.");
+    expect(result.error).not.toContain("ECONNREFUSED");
+  });
+});
+
+describe("deleteItem action", () => {
+  it("deletes and reports success with nothing to hand back", async () => {
+    const result = await deleteItem("item_1");
+
+    expect(result).toEqual({ success: true });
+    expect(deleteItemRecord).toHaveBeenCalledWith("item_1");
+  });
+
+  it("refuses and never deletes when nobody is signed in", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    const result = await deleteItem("item_1");
+
+    expect(result).toEqual({ success: false, error: "You are not signed in" });
+    expect(deleteItemRecord).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The id crosses the Server Action boundary from a browser, where TypeScript's
+   * guarantees have already run out, so its shape is checked here rather than
+   * assumed from the parameter type.
+   */
+  it("refuses an empty or blank id before querying", async () => {
+    for (const id of ["", "   "]) {
+      const result = await deleteItem(id);
+
+      expect(result.success).toBe(false);
+      expect(deleteItemRecord).not.toHaveBeenCalled();
+    }
+  });
+
+  it("refuses an id that is not a string at all", async () => {
+    const result = await deleteItem(42 as unknown as string);
+
+    expect(result.success).toBe(false);
+    expect(deleteItemRecord).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Missing and not-yours have to read identically. The query already collapses
+   * them into one `false`; this pins that the action does not reintroduce the
+   * distinction on its way back out.
+   */
+  it("reports a missing item and someone else's item in the same words", async () => {
+    vi.mocked(deleteItemRecord).mockResolvedValue(false);
+
+    const result = await deleteItem("item_1");
+
+    expect(result).toEqual({
+      success: false,
+      error: "This item no longer exists",
+    });
+  });
+
+  it("does not leak the underlying error when the delete throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(deleteItemRecord).mockRejectedValue(
+      new Error("connect ECONNREFUSED 10.0.0.1:5432")
+    );
+
+    const result = await deleteItem("item_1");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Could not delete this item. Try again.");
     expect(result.error).not.toContain("ECONNREFUSED");
   });
 });
