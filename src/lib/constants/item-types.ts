@@ -36,6 +36,41 @@ export function isItemTypeName(name: string): name is ItemTypeName {
   return Object.hasOwn(ITEM_TYPE_ICONS, name);
 }
 
+/**
+ * The type-specific columns each item type is allowed to carry.
+ *
+ * `title`, `description` and `tags` are not here — every type has them. This is
+ * the table that decides whether a snippet may have a `url` or a link may have
+ * `content`, and both the edit form and the write path read it: the form to
+ * choose which inputs to render, the update query to choose which columns to
+ * touch. A hidden input is not a validated one, so the server cannot take the
+ * client's word for which fields were in play.
+ *
+ * File and image own nothing editable — `fileUrl`, `fileName` and `fileSize`
+ * come from an upload, not from typing.
+ */
+export const ITEM_TYPE_EDITABLE_FIELDS = {
+  snippet: ["content", "language"],
+  prompt: ["content"],
+  command: ["content", "language"],
+  note: ["content"],
+  file: [],
+  image: [],
+  link: ["url"],
+} as const satisfies Record<ItemTypeName, readonly EditableItemField[]>;
+
+/** The columns `ITEM_TYPE_EDITABLE_FIELDS` hands out */
+export type EditableItemField = "content" | "language" | "url";
+
+export function hasEditableField(
+  type: ItemTypeName,
+  field: EditableItemField
+): boolean {
+  return (ITEM_TYPE_EDITABLE_FIELDS[type] as readonly EditableItemField[]).includes(
+    field
+  );
+}
+
 /** Types only available on the Pro plan */
 export const PRO_ITEM_TYPES = ["file", "image"] as const satisfies ItemTypeName[];
 

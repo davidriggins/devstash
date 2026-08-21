@@ -1,16 +1,70 @@
-# Current Feature
+# Current Feature: Item Drawer — Edit Mode
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- The drawer's Edit button (currently `disabled` with "Editing is coming soon") toggles
+  the open drawer into edit mode inline — same drawer, fields become inputs
+- In edit mode the action bar is replaced by Save and Cancel; Cancel discards and
+  returns to view mode, Save persists and returns to view mode with fresh data
+- Toast on save success and on save error
+- Editable for every type: **title** (text, required), **description** (textarea,
+  optional), **tags** (comma-separated text that becomes a tag array on save)
+- Type-specific fields, shown only for the relevant type:
+  | Field | Shown for | Input |
+  | --- | --- | --- |
+  | Content | snippet, prompt, command, note | textarea |
+  | Language | snippet, command | text |
+  | URL | link | text |
+- Display-only in edit mode: item type, collections, created/updated dates
+- `updateItem(itemId, data)` in a new `src/actions/items.ts`, returning
+  `{ success, data, error }`: Zod-validate first, `auth()` for the session, ownership
+  check, then the query function
+- `updateItem` query function in `src/lib/db/items.ts` — disconnect all existing tags
+  and connect-or-create the new ones; returns the updated `ItemDetail` so the drawer
+  refreshes without a second fetch
+- Zod rules: `title` non-empty trimmed; `description`/`content`/`language` string or
+  null, optional; `url` a valid URL or null; `tags` an array of trimmed non-empty
+  strings. Zod errors come back in `error` so the client can show them
+- Client guard: Save disabled while the title is empty
+- `router.refresh()` after save so the underlying card list picks up the change
 
 ## Notes
 
-<!-- Any extra notes -->
+- **No form library** — controlled inputs with local state, per the spec
+- `src/actions/items.ts` does not exist yet; `src/components/ui/textarea.tsx` does not
+  either. `textarea` comes from the shadcn CLI and needs **no new npm dependency**
+  (it is a styled native `<textarea>`), the same way `sheet`, `skeleton` and
+  `alert-dialog` did
+- **The drawer paints title, description and tags from the `item` prop (card data),
+  not from `detail`.** That is what makes it open instantly, but it means a saved
+  title would keep rendering the stale card value until `router.refresh()` lands and
+  the server re-renders the page. Edit mode has to prefer `detail` over `item` for
+  those three fields once the fetch has resolved, or the save will look like it did
+  nothing
+- For the same reason, **Edit should not be reachable until `detail` has loaded** —
+  the form's initial values for content, language and URL only exist there. Disabled
+  while `isLoading`, and unavailable on the error branch
+- The drawer's `result` state is already tagged with the item id, so the action's
+  returned `ItemDetail` can be written straight into it (`{ id, detail, error: null }`)
+  — that is the "refresh without a second fetch" the spec asks for
+- Ownership: `getItemById` puts the check inside the `where` so there is no branch
+  that can touch another user's row. The update query should do the same — scope the
+  write by `{ id, userId }` (an `updateMany`, or a `findFirst` guard inside the same
+  transaction as the tag work), never `update({ where: { id } })` after a separate check
+- `Item.updatedAt` is `@updatedAt`, so the timestamp moves on its own
+- Type-specific fields are keyed off `ItemDetail.type` (`ItemTypeName`); there is no
+  `contentType` on the drawer's data. Whatever the client hides, the action still has
+  to decide server-side — a hidden field is not a validated one
+- Tests (server actions and utilities only): the Zod schema's rejections, the ownership
+  scoping, and the tag disconnect/connect-or-create shape. Mock `@/lib/prisma`,
+  `@/auth` and `@/lib/db/*`; no component tests. Suite is currently 82 across 10 files
+- No migration — every column already exists
+- Not in scope: favorite, pin and delete stay disabled; collections stay display-only;
+  the content textarea is not a code editor
 
 ## History
 

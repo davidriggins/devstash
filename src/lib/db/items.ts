@@ -1,10 +1,12 @@
 import { getCurrentUserId } from "@/lib/db/user";
 import {
   ITEM_TYPE_NAMES,
+  hasEditableField,
   isItemTypeName,
   type ItemTypeName,
 } from "@/lib/constants/item-types";
 import { prisma } from "@/lib/prisma";
+import type { UpdateItemInput } from "@/lib/validation/items";
 import type {
   DashboardItem,
   ItemDetail,
@@ -131,6 +133,21 @@ interface ItemDetailRecord extends ItemRecord {
   collections: { collection: { id: string; name: string } }[];
 }
 
+function toItemDetail({
+  itemType,
+  tags,
+  collections,
+  ...item
+}: ItemDetailRecord): ItemDetail {
+  return {
+    ...item,
+    // Same fallback as the cards: custom types are not built yet
+    type: isItemTypeName(itemType.name) ? itemType.name : "note",
+    tags: tags.map((tag) => tag.name),
+    collections: collections.map(({ collection }) => collection),
+  };
+}
+
 /**
  * One item in full, or null when it does not exist, is not this user's, or
  * nobody is signed in.
@@ -152,19 +169,73 @@ export async function getItemById(id: string): Promise<ItemDetail | null> {
     select: ITEM_DETAIL_SELECT,
   });
 
-  if (!item) {
+  return item ? toItemDetail(item) : null;
+}
+
+/**
+ * Writes one item's editable fields and returns it in full, or null when it
+ * does not exist, is not this user's, or nobody is signed in — the same three
+ * cases `getItemById` collapses, and collapsed here for the same reason.
+ *
+ * Ownership is in the `where` of both statements, not checked once and trusted
+ * afterwards. The read is needed anyway: which of `content`, `language` and
+ * `url` may be written is the *item type's* decision, and the type is a column,
+ * not something the caller can be allowed to assert.
+ */
+export async function updateItem(
+  id: string,
+  data: UpdateItemInput
+): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
     return null;
   }
 
-  const { itemType, tags, collections, ...rest } = item;
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.item.findFirst({
+      where: { id, userId },
+      select: { itemType: { select: { name: true } } },
+    });
 
-  return {
-    ...rest,
-    // Same fallback as the cards: custom types are not built yet
-    type: isItemTypeName(itemType.name) ? itemType.name : "note",
-    tags: tags.map((tag) => tag.name),
-    collections: collections.map(({ collection }) => collection),
-  };
+    if (!existing) {
+      return null;
+    }
+
+    const type = isItemTypeName(existing.itemType.name)
+      ? existing.itemType.name
+      : "note";
+
+    const item: ItemDetailRecord = await tx.item.update({
+      // Scoped again rather than by `id` alone. Nothing can change ownership
+      // between the two statements, but a `where` that reads `{ id }` is one
+      // careless refactor away from being the only check that ever ran.
+      where: { id, userId },
+      data: {
+        title: data.title,
+        description: data.description,
+        // Only the columns this type owns. The form hides the others, which is
+        // a courtesy to the user and no protection at all — this is the check.
+        ...(hasEditableField(type, "content") && { content: data.content }),
+        ...(hasEditableField(type, "language") && { language: data.language }),
+        ...(hasEditableField(type, "url") && { url: data.url }),
+        tags: {
+          // `set: []` runs before `connectOrCreate` in the same nested write,
+          // so a tag that survives the edit is disconnected and reconnected
+          // rather than deleted. The `Tag` rows themselves are shared and are
+          // never removed here — an orphaned tag belongs to a cleanup job.
+          set: [],
+          connectOrCreate: data.tags.map((name) => ({
+            where: { name },
+            create: { name },
+          })),
+        },
+      },
+      select: ITEM_DETAIL_SELECT,
+    });
+
+    return toItemDetail(item);
+  });
 }
 
 /**
