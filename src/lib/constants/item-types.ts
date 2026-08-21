@@ -9,6 +9,11 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+// Type-only, so nothing from the generated client is bundled to the browser.
+// Taking the enum from Prisma rather than restating its three strings means the
+// table below cannot drift from the column it is written into.
+import type { ContentType } from "@/generated/prisma/enums";
+
 export const ITEM_TYPE_ICONS = {
   snippet: Code,
   prompt: Sparkles,
@@ -71,6 +76,49 @@ export function hasEditableField(
   );
 }
 
+/**
+ * Which content column is authoritative for each type.
+ *
+ * `Item.contentType` is a required enum and **the schema does not tie it to the
+ * item type row** — nothing at the database level stops a snippet being stored
+ * as `URL`. Until this table existed the mapping lived only in a ternary in
+ * `prisma/seed.ts`, which is why the seed has no `FILE` rows at all. The write
+ * path derives the value from here and never accepts it from the client, since
+ * a client that could set it could make the two disagree.
+ */
+export const ITEM_TYPE_CONTENT_TYPES = {
+  snippet: "TEXT",
+  prompt: "TEXT",
+  command: "TEXT",
+  note: "TEXT",
+  file: "FILE",
+  image: "FILE",
+  link: "URL",
+} as const satisfies Record<ItemTypeName, ContentType>;
+
+/**
+ * The types that can be created by typing, in canonical order.
+ *
+ * Derived from the table above rather than listed by hand, because the reason
+ * file and image are missing is not that they are Pro — it is that a `FILE`
+ * item's columns come from an upload, and there is no upload. A future type
+ * backed by a file would be excluded for the same reason without anyone
+ * remembering to add it here.
+ */
+export const CREATABLE_ITEM_TYPES = ITEM_TYPE_NAMES.filter(
+  (name) => ITEM_TYPE_CONTENT_TYPES[name] !== "FILE"
+);
+
+/**
+ * Narrows a type name that arrived from a form to one that can be created.
+ *
+ * Goes through `isItemTypeName` first, so the prototype-chain trap is handled
+ * in one place: `"constructor"` never reaches the lookup below.
+ */
+export function isCreatableItemType(name: string): name is ItemTypeName {
+  return isItemTypeName(name) && ITEM_TYPE_CONTENT_TYPES[name] !== "FILE";
+}
+
 /** Types only available on the Pro plan */
 export const PRO_ITEM_TYPES = ["file", "image"] as const satisfies ItemTypeName[];
 
@@ -130,6 +178,17 @@ export const ITEM_TYPE_LABELS = {
   file: "Files",
   image: "Images",
   link: "Links",
+} as const satisfies Record<ItemTypeName, string>;
+
+/** For naming one item rather than a section of them, as in a type picker */
+export const ITEM_TYPE_SINGULAR_LABELS = {
+  snippet: "Snippet",
+  prompt: "Prompt",
+  command: "Command",
+  note: "Note",
+  file: "File",
+  image: "Image",
+  link: "Link",
 } as const satisfies Record<ItemTypeName, string>;
 
 /** Route segment for each type, e.g. /items/snippets */

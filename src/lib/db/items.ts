@@ -1,12 +1,13 @@
 import { getCurrentUserId } from "@/lib/db/user";
 import {
+  ITEM_TYPE_CONTENT_TYPES,
   ITEM_TYPE_NAMES,
   hasEditableField,
   isItemTypeName,
   type ItemTypeName,
 } from "@/lib/constants/item-types";
 import { prisma } from "@/lib/prisma";
-import type { UpdateItemInput } from "@/lib/validation/items";
+import type { CreateItemInput, UpdateItemInput } from "@/lib/validation/items";
 import type {
   DashboardItem,
   ItemDetail,
@@ -173,6 +174,75 @@ export async function getItemById(id: string): Promise<ItemDetail | null> {
 }
 
 /**
+ * Turns normalized tag names into a nested write.
+ *
+ * Shared by create and update so that "a tag name becomes a row" is defined
+ * once. `Tag.name` is globally unique, so `connectOrCreate` is the only correct
+ * shape: a name another user already introduced must be joined, not duplicated.
+ */
+function tagConnectOrCreate(names: string[]) {
+  return names.map((name) => ({ where: { name }, create: { name } }));
+}
+
+/**
+ * Creates one item for the current user and returns it in full, or null when
+ * nobody is signed in or the system type row is missing.
+ *
+ * Two columns are set here that no other write in this file touches, and
+ * neither is taken from the caller:
+ *
+ * - `itemTypeId`, resolved from the type name. Scoped `isSystem: true` because
+ *   type names are unique per `(name, userId)`, so a user could own a custom
+ *   type called "snippet" and a create must not silently land on it.
+ * - `contentType`, read from `ITEM_TYPE_CONTENT_TYPES`. The schema does not tie
+ *   that enum to the type row, so this is the only thing keeping them agreed.
+ */
+export async function createItem(
+  data: CreateItemInput
+): Promise<ItemDetail | null> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return null;
+  }
+
+  const itemType = await prisma.itemType.findFirst({
+    where: { name: data.type, isSystem: true },
+    select: { id: true },
+  });
+
+  if (!itemType) {
+    // Not a user error: the seeded system types are missing. Worth a log line,
+    // because the alternative is a create that fails for no visible reason.
+    console.error(`No system item type named "${data.type}"`);
+
+    return null;
+  }
+
+  const item: ItemDetailRecord = await prisma.item.create({
+    data: {
+      userId,
+      itemTypeId: itemType.id,
+      contentType: ITEM_TYPE_CONTENT_TYPES[data.type],
+      title: data.title,
+      description: data.description,
+      // The same gate the update write applies, against the same table: a link
+      // cannot arrive carrying content, and a snippet cannot set a url. The
+      // dialog hides the other fields, which is a courtesy and no protection.
+      ...(hasEditableField(data.type, "content") && { content: data.content }),
+      ...(hasEditableField(data.type, "language") && {
+        language: data.language,
+      }),
+      ...(hasEditableField(data.type, "url") && { url: data.url }),
+      tags: { connectOrCreate: tagConnectOrCreate(data.tags) },
+    },
+    select: ITEM_DETAIL_SELECT,
+  });
+
+  return toItemDetail(item);
+}
+
+/**
  * Writes one item's editable fields and returns it in full, or null when it
  * does not exist, is not this user's, or nobody is signed in — the same three
  * cases `getItemById` collapses, and collapsed here for the same reason.
@@ -225,10 +295,7 @@ export async function updateItem(
           // rather than deleted. The `Tag` rows themselves are shared and are
           // never removed here — an orphaned tag belongs to a cleanup job.
           set: [],
-          connectOrCreate: data.tags.map((name) => ({
-            where: { name },
-            create: { name },
-          })),
+          connectOrCreate: tagConnectOrCreate(data.tags),
         },
       },
       select: ITEM_DETAIL_SELECT,

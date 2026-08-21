@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/db/user", () => ({ getCurrentUserId: vi.fn() }));
-vi.mock("@/lib/db/items", () => ({ updateItem: vi.fn(), deleteItem: vi.fn() }));
+vi.mock("@/lib/db/items", () => ({
+  createItem: vi.fn(),
+  updateItem: vi.fn(),
+  deleteItem: vi.fn(),
+}));
 
 const { getCurrentUserId } = await import("@/lib/db/user");
 const {
+  createItem: createItemRecord,
   updateItem: updateItemRecord,
   deleteItem: deleteItemRecord,
 } = await import("@/lib/db/items");
-const { deleteItem, updateItem } = await import("@/actions/items");
+const { createItem, deleteItem, updateItem } = await import("@/actions/items");
 
 const USER_ID = "user_1";
 
@@ -42,8 +47,155 @@ const SAVED = {
 
 beforeEach(() => {
   vi.mocked(getCurrentUserId).mockReset().mockResolvedValue(USER_ID);
+  vi.mocked(createItemRecord).mockReset().mockResolvedValue(SAVED);
   vi.mocked(updateItemRecord).mockReset().mockResolvedValue(SAVED);
   vi.mocked(deleteItemRecord).mockReset().mockResolvedValue(true);
+});
+
+/** What the dialog sends: every field, whatever type is selected */
+const NEW_ITEM = { type: "snippet", ...VALID };
+
+describe("createItem action", () => {
+  it("creates and hands back the whole record", async () => {
+    const result = await createItem(NEW_ITEM);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual(SAVED);
+  });
+
+  it("refuses and never writes when nobody is signed in", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    const result = await createItem(NEW_ITEM);
+
+    expect(result).toEqual({ success: false, error: "You are not signed in" });
+    expect(createItemRecord).not.toHaveBeenCalled();
+  });
+
+  describe("validation", () => {
+    it("rejects an empty title with the schema's own message", async () => {
+      const result = await createItem({ ...NEW_ITEM, title: "   " });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Title is required");
+      expect(createItemRecord).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The dialog only offers the five creatable types, but the payload arrives
+     * from a browser and nothing about that list is enforced on the way in.
+     */
+    it("rejects a type that needs an upload, or is not a type at all", async () => {
+      for (const type of ["file", "image", "widget", "constructor", 1, null]) {
+        const result = await createItem({ ...NEW_ITEM, type });
+
+        expect(result.success).toBe(false);
+      }
+
+      expect(createItemRecord).not.toHaveBeenCalled();
+    });
+
+    it("rejects a link with no URL", async () => {
+      const result = await createItem({ ...NEW_ITEM, type: "link", url: "" });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("A link needs a URL");
+      expect(createItemRecord).not.toHaveBeenCalled();
+    });
+
+    it("rejects a payload that is not an object", async () => {
+      for (const data of [null, "title", 7, []]) {
+        expect((await createItem(data)).success).toBe(false);
+      }
+
+      expect(createItemRecord).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The columns a caller must never set. `contentType` is derived from the
+     * type at the write, and letting one through would put the enum and the
+     * type row into exactly the disagreement the schema does not prevent;
+     * `userId` decides ownership; `isPinned` and `isFavorite` have their own
+     * mutations. None are declared in the schema, so the parse drops them —
+     * this pins that, because the query spreads what it is handed.
+     */
+    it("drops fields the schema never declared", async () => {
+      await createItem({
+        ...NEW_ITEM,
+        id: "item_stolen",
+        userId: "user_2",
+        itemTypeId: "type_forced",
+        contentType: "URL",
+        isPinned: true,
+        isFavorite: true,
+        createdAt: new Date("2000-01-01"),
+      });
+
+      const payload = vi.mocked(createItemRecord).mock.calls[0][0];
+
+      for (const key of [
+        "id",
+        "userId",
+        "itemTypeId",
+        "contentType",
+        "isPinned",
+        "isFavorite",
+        "createdAt",
+      ]) {
+        expect(payload).not.toHaveProperty(key);
+      }
+    });
+
+    /**
+     * The query gets the *parsed* value. Passing the raw payload through would
+     * put an untrimmed title and an empty-string description into the database
+     * exactly as typed, and leave the tags un-normalized.
+     */
+    it("passes the normalized payload to the query, not the raw one", async () => {
+      await createItem({
+        ...NEW_ITEM,
+        title: "  Padded  ",
+        description: "   ",
+        url: "",
+        tags: [" React ", "react", ""],
+      });
+
+      expect(createItemRecord).toHaveBeenCalledWith({
+        type: "snippet",
+        title: "Padded",
+        description: null,
+        content: VALID.content,
+        language: "typescript",
+        url: null,
+        tags: ["react"],
+      });
+    });
+  });
+
+  /** A missing system type row reads the same as any other failed write */
+  it("reports a refused write without saying why", async () => {
+    vi.mocked(createItemRecord).mockResolvedValue(null);
+
+    const result = await createItem(NEW_ITEM);
+
+    expect(result).toEqual({
+      success: false,
+      error: "Could not create this item. Try again.",
+    });
+  });
+
+  it("does not leak the underlying error when the write throws", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(createItemRecord).mockRejectedValue(
+      new Error("connect ECONNREFUSED 10.0.0.1:5432")
+    );
+
+    const result = await createItem(NEW_ITEM);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("Could not create this item. Try again.");
+    expect(result.error).not.toContain("ECONNREFUSED");
+  });
 });
 
 describe("updateItem action", () => {

@@ -1,16 +1,86 @@
-# Current Feature
+# Current Feature: Item Create
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- A "New Item" dialog opens from the existing top-bar button, which is inert today
+- Type selector over the five typeable types: snippet, prompt, command, note, link
+- Fields render from the selected type:
+  - every type: title (required), description, tags
+  - snippet / command: content, language
+  - prompt / note: content
+  - link: URL (required)
+- `createItemSchema` with Zod, sharing its field rules with `updateItemSchema`
+- `createItem` query in `src/lib/db/items.ts`
+- `createItem` server action in `src/actions/items.ts`
+- Toast on success, dialog closes, the page behind refreshes to show the new item
 
 ## Notes
 
-<!-- Any extra notes -->
+### What has to be built vs. reused
+
+- **`dialog` and `select` are not installed.** `src/components/ui/` has button, input,
+  label, textarea, badge, card, sheet, skeleton, alert-dialog, dropdown-menu, toast,
+  avatar, separator. Both come from the shadcn CLI and need **no new npm dependency** —
+  Base UI is already installed, exactly as `sheet`, `textarea` and `skeleton` went.
+- **`Topbar` is a server component** and its "New Item" `Button` has no handler. The
+  client boundary should sit on a new component the top bar renders, not on `Topbar`
+  itself — the same call `ItemList` made for the drawer, and it keeps `EnvironmentBadge`
+  (a server component reading `DATABASE_URL`) on the server side.
+- **Do not build a second field table.** `ITEM_TYPE_EDITABLE_FIELDS` in
+  `src/lib/constants/item-types.ts` already says exactly what the spec's field list says
+  (snippet → content+language, command → content+language, prompt/note → content,
+  link → url). The create form and the create query should both read it, as the edit
+  form and `updateItem` already do.
+- **Tags are already solved.** `tagsSchema` lowercases, dedupes and caps at 20, because
+  `Tag.name` is globally unique. Reuse it; do not write a second normalizer.
+
+### The two columns the edit path never touches
+
+`updateItem` writes an existing row, so it never sets `contentType` or `itemTypeId`.
+Create must set both, and neither may come from the client.
+
+- **`contentType`** is a required Postgres enum (`TEXT` / `FILE` / `URL`) saying which
+  content column is authoritative. **Nothing in the schema ties it to the item type** —
+  a snippet row can be written with `contentType: URL`. Today the mapping exists only as
+  one ternary in `prisma/seed.ts`. Both `docs/item-types.md` and
+  `docs/item-crud-architecture.md` call for a constant; this feature is where it lands,
+  probably `ITEM_TYPE_CONTENT_TYPES` beside the other type tables, derived on the server
+  from the chosen type.
+- **`itemTypeId`** is a FK, so create resolves the type name to a row. Scope that lookup
+  `{ name, isSystem: true }` — `@@unique([name, userId])` means a user could later own a
+  custom type also called `snippet`, and `getItemsByType` already pins `isSystem` for
+  exactly this reason.
+
+### Decisions to make during implementation
+
+- **Link URL is required here but optional in update.** The edit feature shipped that as
+  a known gap ("clearing it leaves the item rendering 'No content'"). If create requires
+  it, the two schemas disagree about the same column. Either make update require it for
+  links too, or record why create is stricter — do not leave it unnoticed.
+- **File and image are absent from the selector**, and that is not an oversight:
+  `ITEM_TYPE_EDITABLE_FIELDS` gives them nothing typeable, `fileUrl`/`fileName`/
+  `fileSize` come from an upload, and upload is not built. They stay out.
+- **Errors inline, success as a toast.** Three features in a row (rate limiting, edit
+  mode, delete) deviated from a spec asking for a toast on failure, because a refusal has
+  to stay on screen next to the field it is about. Expect the same call here.
+- **The action takes `unknown`.** `updateItem` does, deliberately — TypeScript's types
+  stop at the Server Action boundary.
+- The free tier's 50-item cap is real in the product spec but Pro gating is not enabled
+  anywhere yet; out of scope unless asked.
+- "New Collection" in the top bar stays inert. Different feature.
+
+### Testing
+
+Server actions and utilities only, per the workflow. The suite is at **127 tests**.
+Expect coverage of `createItemSchema` (required title, required URL for links, the
+empty-to-null transforms, tag normalization), the `createItem` query (signed-out
+returns nothing, the `isSystem` type lookup, which columns each of the five types
+writes, the derived `contentType`) and the action (guards, missing type, a 500 that
+does not echo the underlying error).
 
 ## History
 

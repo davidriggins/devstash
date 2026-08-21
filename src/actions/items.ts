@@ -2,11 +2,19 @@
 
 import { getCurrentUserId } from "@/lib/db/user";
 import {
+  createItem as createItemRecord,
   deleteItem as deleteItemRecord,
   updateItem as updateItemRecord,
 } from "@/lib/db/items";
-import { updateItemSchema } from "@/lib/validation/items";
+import { createItemSchema, updateItemSchema } from "@/lib/validation/items";
 import type { ItemDetail } from "@/types/dashboard";
+
+export interface CreateItemResult {
+  success: boolean;
+  /** The new item in full, in case a caller wants to open it straight away */
+  data?: ItemDetail;
+  error?: string;
+}
 
 export interface UpdateItemResult {
   success: boolean;
@@ -22,6 +30,53 @@ export interface DeleteItemResult {
 
 /** Shown for a gone item and for one that was never this user's alike */
 const MISSING_ITEM_MESSAGE = "This item no longer exists";
+
+/** Covers a failed write and a missing system type row alike */
+const CREATE_FAILED_MESSAGE = "Could not create this item. Try again.";
+
+/**
+ * Creates one item from the "New Item" dialog.
+ *
+ * `data: unknown` for the same reason `updateItem` uses it — TypeScript's types
+ * stop at the Server Action boundary, and a declared parameter type here would
+ * be a guarantee nothing enforces. The parse is what makes the payload safe,
+ * and it is also what decides the item's type: the dialog sends every field
+ * whatever type is selected, and the write drops the ones that type does not
+ * own, so a link cannot smuggle in content.
+ */
+export async function createItem(data: unknown): Promise<CreateItemResult> {
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    return { success: false, error: "You are not signed in" };
+  }
+
+  const parsed = createItemSchema.safeParse(data);
+
+  if (!parsed.success) {
+    // The first issue only, matching `updateItem`: the dialog shows one message
+    // above its buttons, and a list of every broken rule reads worse than the
+    // one thing to fix next.
+    return {
+      success: false,
+      error: parsed.error.issues[0]?.message ?? "Those details are not valid",
+    };
+  }
+
+  try {
+    const item = await createItemRecord(parsed.data);
+
+    if (!item) {
+      return { success: false, error: CREATE_FAILED_MESSAGE };
+    }
+
+    return { success: true, data: item };
+  } catch (error) {
+    console.error("Creating item failed:", error);
+
+    return { success: false, error: CREATE_FAILED_MESSAGE };
+  }
+}
 
 /**
  * Saves the drawer's edit form.
