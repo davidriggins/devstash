@@ -1,159 +1,16 @@
-# Current Feature: Delete Item
+# Current Feature
 
 ## Status
 
-In Progress
+Not Started
 
 ## Goals
 
-- Wire the drawer's `Trash2` button, which has been `disabled` with
-  `title="Deleting is coming soon"` since the drawer shipped, so it actually
-  deletes the open item.
-- Guard it with a shadcn `AlertDialog` confirmation that names the item being
-  deleted, with a destructive confirm button.
-- On success: close the confirmation, close the drawer, raise a success toast,
-  and `router.refresh()` so the cards behind catch up.
-- Add `deleteItem` as a Server Action in `src/actions/items.ts` over a
-  `deleteItem` query in `src/lib/db/items.ts`, scoped to the signed-in user.
-- Missing and not-yours collapse into one answer, matching `getItemById` and
-  `updateItem`.
-- Report failure inline in the confirmation dialog, not by silently closing it.
-- Unit tests for the new query and action; `npm run test`, `npm run lint` and
-  `npm run build` all clean.
+<!-- Goals & requirements -->
 
 ## Notes
 
-### Where it lives
-
-The drawer only. `ItemCard` already has an `actions` slot (added for exactly
-this family of controls), but a per-card delete belongs with favorite and pin —
-all three are card-level toggles and they should be designed as one row, not
-one-at-a-time. This feature leaves that slot untouched. If a card-level delete
-is wanted now, say so at `start` and the scope grows by one prop.
-
-The mutation is a **Server Action**, not a `DELETE /api/items/[id]` route. The
-drawer's initial read goes through a route because it is a client fetch of a
-record; mutations from client components are Server Actions in this project, and
-`updateItem` is the precedent to match. A route is what a future mobile/CLI
-client would need, and that is not today.
-
-### The query
-
-`deleteItem(id)` in `src/lib/db/items.ts`, returning a boolean.
-
-Use `prisma.item.deleteMany({ where: { id, userId } })` and check `count === 1`,
-**not** `item.delete()`. `delete` throws `P2025` when the row is missing, which
-would mean catching a Prisma error code to tell "already gone" from "the
-database fell over" — `deleteMany` reports it as a number instead. The `where`
-is scoped to the user for the same reason `updateItem` scopes both of its
-statements: ownership is part of the query, never a check on the result.
-
-Return `false` when `getCurrentUserId()` is null, before any query runs — every
-other function in that file does the same.
-
-**No transaction is needed, and no relation cleanup.** `ItemCollection.item` is
-`onDelete: Cascade`, and the implicit `_ItemTags` join table cascades too, so the
-memberships and tag links go with the row. Shared `Tag` rows are never deleted —
-the same rule the edit write follows, and orphan cleanup is still someone else's
-job. Worth stating in a comment so nobody later adds a manual `tags: { set: [] }`
-that does nothing.
-
-### The action
-
-`deleteItem(itemId: string)` in `src/actions/items.ts`, returning
-`{ success, error? }`. Mirror `updateItem`'s shape:
-
-- signed out → `"You are not signed in"`
-- non-string or empty `itemId` → the generic failure (the id arrives from the
-  browser; TypeScript's guarantees stop at the action boundary)
-- query returned `false` → `"This item no longer exists"`, the same words
-  `updateItem` uses, because missing and not-yours must not be distinguishable
-- thrown → `console.error` the cause, return a generic message that does not
-  echo it
-
-There is nothing to return on success — no `data` field.
-
-### The confirmation
-
-`src/components/ui/alert-dialog.tsx` is **already installed** (it came in with
-the profile page's delete-account flow). No shadcn CLI run, no new npm
-dependency, no migration.
-
-Model it on `DeleteAccountDialog` for structure, but **not** for the typed
-confirmation — typing the account email is right for a destructive, irreversible
-account deletion and is far too heavy for one item. A destructive confirm button
-is the whole gate here.
-
-Copy: title along the lines of "Delete this item?", description naming the item
-("**{title}** will be permanently deleted. This cannot be undone."), Cancel and
-a destructive "Delete".
-
-Three traps to get right:
-
-1. **The trigger sits inside the drawer's `<form>`.** Every button in there is
-   already `type="button"` for this reason; the new trigger and the dialog's
-   confirm button both need it too, or they submit the edit form.
-2. **Nested overlays.** The sheet and the alert dialog are both `z-50`, so the
-   dialog only wins because its portal is appended later — the same DOM-order
-   tie that hid the Copy toast until the toast viewport went to `z-[60]`. Check
-   it with `document.elementFromPoint` at the button's centre, not by finding
-   the node in the DOM. Presence in the DOM is not visibility, which is exactly
-   how that bug was missed last time.
-3. **Toast timing.** MCP round-trip latency outruns the 5s toast timeout, so a
-   click-then-screenshot always photographs an empty screen whether or not the
-   toast worked. If a visual is wanted, raise `timeout` temporarily and revert.
-
-### The delete flow in the drawer
-
-Order matters: `router.refresh()` first or the toast last is not the same thing.
-
-1. Confirm → run the action inside a `useTransition`, with both dialog buttons
-   disabled while it is in flight.
-2. On failure, keep the dialog open and render the error inside it. Closing it
-   and dropping a red toast would put the message somewhere different from every
-   other refusal in this project, and it would vanish in 5s.
-3. On success, close the dialog, `onOpenChange(false)` the drawer, toast
-   "Item deleted", then `router.refresh()`.
-
-`selected` in `ItemList` is deliberately not cleared on close — the sheet keeps
-its children mounted while it animates out. That still holds: the drawer is
-closing, and after the refresh there is no card left to reopen it from. The
-drawer's `result` state keeps the deleted record until the next card is clicked,
-which is harmless but worth a moment's thought rather than an assumption.
-
-Delete should be **unavailable while editing** — the action bar is replaced by
-Save/Cancel in edit mode already, so this falls out for free. Confirm it does.
-
-Unlike Edit, delete does **not** need `detail` to have arrived: it only needs the
-id, which the card already carries. Leave it enabled during the skeleton.
-
-### Tests
-
-Colocated, Node, nothing reaching a database — mock `@/lib/prisma`,
-`@/lib/db/user` and `@/lib/db/items` as the existing item tests do. Currently
-116 tests across 12 files; expect roughly 12–15 more.
-
-Query (`src/lib/db/items.test.ts`):
-
-- signed out → no query issued at all, returns `false`
-- the `where` really is `{ id, userId }`, not `{ id }`
-- `count: 0` → `false`; `count: 1` → `true`
-- the raw id reaches the query unmangled
-
-Action (`src/actions/items.test.ts`):
-
-- signed out, empty/non-string id
-- query `false` → `"This item no longer exists"`, identical for missing and
-  not-yours
-- a thrown `ECONNREFUSED` becomes a generic message and is not echoed back
-
-### Known gaps to accept up front
-
-- No undo. The item is gone; the toast says so and nothing offers to bring it
-  back. A soft-delete column is a schema change and a different feature.
-- Favorite and pin stay `disabled` — still waiting on their own mutations.
-- No bulk delete, and no delete from the card.
-- Free-tier item counts are computed live, so nothing needs decrementing.
+<!-- Any extra notes -->
 
 ## History
 
@@ -188,3 +45,4 @@ Action (`src/actions/items.test.ts`):
 - Three-column items grid: `/items/[type]` went from `grid gap-4 md:grid-cols-2` to `grid gap-4 sm:grid-cols-2 xl:grid-cols-3` — one column, two, then three. One `className` and a comment; no other file changed. **The breakpoint is the whole feature, and the spec's preferred answer turned out to be wrong.** The spec said `lg:grid-cols-3` to match the dashboard's collections grid and treat this page as the odd one out; `xl` was named only as a fallback "if 230px looks broken — decide by looking, not by arithmetic". It looks broken. Viewport width is not content width here: the sidebar takes ~256px plus 48px of padding, so at `lg` three columns leave about 230px a card, and at that width titles truncated to `Docker Co…` and `shadcn/ui …`, descriptions were cut mid-word, tags stacked one per line and card heights went ragged. The reason collections tolerate `lg` and items do not is that a collection card is laid out **vertically** (name, count, description, icon row) while an `ItemCard` is laid out **horizontally** (icon tile │ content │ date), so it loses its content column first and has a floor the other does not. At `xl` the same three columns get 315px and everything reads. That reasoning lives in a comment at the call site, because the next person to see `xl` here will otherwise "fix" it back to `lg` for consistency. Measured rather than eyeballed, reading `gridTemplateColumns` off the live grid: 639px → 1 col / 576px, 640px → 2 / 288px, 768px → 2 / 220px, 1024px → 2 / 352px, 1280px → 3 / 315px, 1536px → 3 / 400px. The dashboard still stacks its items full-width at 961px, unaffected despite sharing `ItemCard`, because row-versus-grid was always the parent's decision — which is exactly the property that made moving `ItemRow` rather than forking it the right call in the previous feature. One genuine behaviour change beyond the new tier: **640–767px now shows two columns where it showed one**, since the 2-col start moved from `md` down to `sm` to match the dashboard grids. That reads well at ~288px, helped by the sidebar being a drawer below `md` so the cards get the full viewport. **768px is still the worst width on the page** at ~220px a card — the sidebar appears at exactly the width where the second column starts — but that is unchanged, since `md:grid-cols-2` produced two columns there too. A real fix means container queries so the card responds to its own width rather than the viewport's, which also covers the sidebar's icon-rail collapse that no media query can see; ruled out as bigger than this change. **A mistake worth recording:** the first edit put the explanatory comment in as `{/* … */}` immediately inside the ternary's else-branch parentheses, which is not a valid position — that takes a single expression — and it was a hard parse error that 500'd *every* route including `/sign-in`, not just this page. Caught by probing the dev server before trusting it; `//` comments there are fine. The build would have caught it too, just later. The `test` step came back empty exactly as the spec predicted at load time: no server action, no utility, and asserting that a class string contains `xl:grid-cols-3` would only restate the source. Existing suite stayed green at 63 tests throughout. Note: the dev server for this directory had been running since before several branch switches, which is why a stale `Can't resolve '@/components/dashboard/ItemRow'` error sat in its log from the earlier component move — unrelated to this change and already resolved by recompilation.
 - Item drawer (`ItemDrawer` + `GET /api/items/[id]`): clicking a card opens a right-side `Sheet` with the item's full record, on the dashboard and the type pages alike — this is the item detail view, and there is no separate item page. `sheet` and `skeleton` came from the shadcn CLI with **no new npm dependency**, Base UI already being installed, exactly as `alert-dialog` had gone. `getItemById` reuses `ITEM_SELECT` and widens it, and puts the ownership check **inside the `where`** (`{ id, userId }`) rather than testing the result afterwards: there is then no branch that could return another user's item, and the caller cannot tell "missing" from "not yours". The route answers **404 for both**, never 403, since a 403 confirms the id is real to anyone enumerating ids. `ItemDetail` is a new type beside `DashboardItem` rather than a widening of it — the list queries read every item a user owns, and a `content` column no card renders would be paid for on every row. **The client boundary sits on a new `ItemList` wrapper, not on `ItemCard`**, which is the design decision the spec called for and it held: the card stays layout-free and prop-dumb, so the dashboard still passes `space-y-3` and the type pages still pass the grid, and neither page's item list crosses to the client. **`ItemCard` became clickable through a stretched overlay button, decided during implementation.** Wrapping the card in a `<button>` is not available: a button may only contain phrasing content, so the `<h3>`, `<p>` and badges cannot live inside one. An `absolute inset-0` button with an `sr-only` label is valid, fully keyboard-reachable, and — the part that matters later — leaves the existing `actions` slot free to hold its own buttons, which nesting would have made invalid HTML. That slot got `relative z-10` so those controls stay clickable above the overlay. The cost is that card text can no longer be selected; the drawer is where you read and copy, so it was accepted. **`item` is passed to the drawer as well as fetched**, which is what makes it feel like a drawer rather than a navigation: the header, type badge, description and tags paint from data the page already has, and only content, collections, language and the updated date wait behind the skeleton. The fetch state is stored **tagged with the id it belongs to** (`{ id, detail, error }`) rather than as separate `detail`/`error` values cleared at the top of the effect — React's compiler lint rejects a synchronous `setState` in an effect body as a cascading render, and carrying the id also makes a stale result recognisable instead of briefly rendering as the new item's. An `AbortController` cancels the previous request on top of that; both were needed, and both were proved by driving a slow first request and a fast second and watching the second's data win. **Only Copy is wired.** It is listed in the spec's action bar and needs no mutation, so it copies `content ?? url ?? fileName ?? title` and raises a toast; favorite, pin, edit and delete all need mutations that belong to the CRUD feature and render `disabled` with a `title`, because a live-looking button that does nothing is the worse lie. **Two layout bugs the browser caught that arithmetic would not have.** First, the drawer stayed **384px** wide however it was styled: `SheetContent`'s own `data-[side=right]:sm:max-w-sm` carries an attribute selector, so a plain `sm:max-w-2xl` loses on specificity — the override has to repeat the `data-[side=right]:` prefix, and the same applies to `w-3/4`, which is now `w-full` below `sm` since a phone should get the whole item rather than a peek at it. Second, at 390px the action bar clipped Edit and pushed the trash icon off-screen entirely; `flex-wrap` sends the right-hand group to its own line instead. **A real bug in a shared component came out of this and shipped as its own `fix:` commit.** The Copy toast fired correctly and sat in the DOM, and was never visible: every overlay in the project is `z-50` — sheet, alert dialog, dropdown — and the toast viewport was `z-50` too, so the later-appended sheet portal won the tie and drew over it. The toast was rendering at x=801 underneath a panel starting at x=529. The viewport is `z-[60]` now, with a comment, because a toast is the topmost transient layer by definition and must outrank modals rather than tie with them; this would have hit *any* toast raised over a modal, not just this one. **Worth remembering about how that was missed:** it was "verified" by reading `[data-slot="toast-title"]` out of the DOM, and presence in the DOM is not visibility — a modal is exactly where those diverge. The conclusive check is `document.elementFromPoint` at the element's centre, which returned the drawer's scroll container before the fix and the toast after it. Compounding it, **MCP round-trip latency outruns the 5s toast timeout**, so click-then-screenshot always photographs an empty screen whether or not a bug exists — the same trap recorded in auth phase 3 and walked into again here; a visual was only obtained by temporarily setting `timeout: 60000`, screenshotting, and reverting. `formatFileSize` moved out of `ItemDrawer.tsx` into a new `src/lib/format.ts` during the `test` step, because testing it in place meant either dragging a Base UI client component into a Node test — against the no-component-tests rule — or leaving the only untested logic in the feature untestable by construction; not `utils.ts`, which is shadcn's own file holding just `cn`. Tests went 63 → **82** across 10 files: 7 on `getItemById` (no query at all when signed out, the scoped `where`, the `constructor`/`__proto__` fallback to `note`), 6 on the route (401 fires *before* the lookup; missing and not-yours both 404; ISO date serialisation, which is why the client revives them; the raw param reaching the query unmangled; a 500 that does not echo the underlying error), and 6 on the formatter, pinning that `1024` reads as **`1.0 KB`** and that `1048575` prints `1024 KB` — a real artifact of rounding after the unit is chosen, recorded rather than hidden. No migration, and `package.json` untouched. Verified in the browser against development (`ep-green-truth-aylaseez`, confirmed by the badge): snippet/prompt/link rendering, Copy landing real content on the clipboard, Enter on a focused card opening the drawer with focus moving inside, the skeleton→loaded transition under a throttled fetch, the error branch replacing the body rather than hanging on a skeleton, and a clean console. Auth was proved over HTTP as well as in unit tests — signed out 401; bogus, `constructor`, `__proto__` and injection-shaped ids all 404 with no 500s; and **a second real account requesting demo's item id got 404**, which needed registering `drawer-probe@devstash.test` and deleting it afterwards by exact email (`db:delete-users --yes` was again *not* used, as it would also take the GitHub-linked `driggins@esri.com`). A throwaway delete script's production guard compared `getDatabaseEnvironment()` to a string when it returns an object, and **failed closed** — worth noting as the guard behaving correctly. **Known gaps, all deliberate:** content is plain `<pre>` with no syntax highlighting, and file/image previews are not built, so a FILE item shows name and size only — `formatFileSize` is therefore unreachable today, since no file items exist and upload is not built; card text is unselectable, the standard cost of the stretched-overlay pattern; and `DashboardItem` is now an even bigger misnomer, still not worth churning files over.
 - Item drawer edit mode (`updateItem` action + query, `updateItemSchema`): clicking Edit turns the open drawer into a form rather than navigating anywhere — same panel, one `<form>` spanning the header (where Save and Cancel replace the action bar) and the scrolling body (where the fields are). `textarea` came from the shadcn CLI with **no new npm dependency**, exactly as `sheet`, `skeleton` and `alert-dialog` had. No migration: every column already existed. **The load-bearing decision is that which fields a type may write is a table, not a set of conditionals.** `ITEM_TYPE_EDITABLE_FIELDS` in the item type constants maps each type to the type-specific columns it owns (snippet → content+language, prompt/note → content, command → content+language, link → url, file/image → nothing), and **both** the form and the update query read it: the form to choose which inputs to render, the query to choose which columns to touch. The form deliberately sends *every* field regardless of type and lets the server discard what the type does not own — sending only what was rendered would have made the client the authority, and a hidden input is not a validated one. Proved with a test that walks all seven types asserting exactly which keys reach `item.update`, so a link cannot smuggle in `content` and a snippet cannot set a `url`. `updateItem` in `src/lib/db/items.ts` scopes **both** statements by `{ id, userId }` inside one `$transaction` — the read is needed anyway to learn the type, and the write repeats the filter rather than reusing the id alone, because a `where: { id }` there is one careless refactor away from being the only check that ever ran. Missing and not-yours collapse into one answer (`null` → "This item no longer exists"), matching the detail route's 404-not-403 for the same reason. `toItemDetail` was extracted so `getItemById` and `updateItem` share one mapping. **The stale-card trap the spec flagged at load was real and is the subtlest part of the diff.** View mode used to read title, description and tags from the `item` prop — the card data, which is what makes the drawer open instantly — but `item` is client state held in `ItemList`, so `router.refresh()` re-renders the page *without ever reaching it*. Reading the title from there after a save would show the old one straight back and make a successful write look like it did nothing. View mode now prefers `detail` once the fetch resolves, and the null handling matters as much as the preference: `detail ? detail.description : item.description`, **not** `??`, or clearing a description would fall through to the stale card value. Edit is `disabled` until `detail` arrives, since content, language and URL exist only in the fetched record and a form opened early would start blank and then save those fields away. Edit mode is stored as **which item is being edited** rather than a boolean — the same id-tagging trick the fetch state already used — so opening a different card or closing the drawer simply stops matching and the form resets itself with no effect and no way to reopen into a half-finished edit. The form is seeded at the moment Edit is clicked, not in an effect, because the values already exist and there is exactly one moment they should be read. On success the action's returned record goes **straight into the fetch state**, which is the "refresh without a second fetch" the spec asked for, and `router.refresh()` then catches up the cards behind. **Tags are lowercased, not merely trimmed**, and deduped: `Tag.name` is unique **globally** rather than per user, so "React" and "react" would be two rows nothing joins back together and every user would be typing into the same fragmented table; deduping also stops `connectOrCreate` seeing one name twice in a single nested write. The write is `set: []` then `connectOrCreate` in one `data.tags`, so the list is replaced rather than added to and the shared `Tag` rows are never deleted — orphan cleanup is someone else's job. `updateItemSchema` turns empty and whitespace-only input into `null` rather than `""`, so a nullable column has one representation of "nothing" instead of two, and it accepts `undefined` so a field the form never rendered reads the same as one that was cleared. The URL rule is a union of `""` and `z.url()`, which allows clearing the field while still rejecting a half-typed `http`. **One deviation from the spec:** it said toast on save success *and* error; success is a toast, but errors render inline next to the Save button — a validation message has to stay on screen beside the field it is about rather than vanishing in 5s, and inline is how every other form in this project reports a refusal. Same call, and the same reasoning, as the rate-limiting feature's deviation. The action takes `data: unknown` rather than a declared payload type, because TypeScript's types stop at the Server Action boundary and pretending otherwise is how a parameter type becomes a fake guarantee; the `itemId` is guarded for shape there too. Tests went 82 → **116** across 12 files: 15 on the schema (whitespace-only title, the length caps, empty-to-null, missing-field-equals-cleared, `""` vs `http`, case-collapsing and dedupe, the tag cap counted *after* normalizing), 10 on the query (no transaction at all when signed out, both `where` clauses scoped, no write when the row is not found, the seven-type field gate, `constructor` falling back to note, the tag replace shape) and 10 on the action (the normalized payload reaching the query rather than the raw one, missing/not-yours reported identically, a 500 that does not echo `ECONNREFUSED`). Lint, `tsc --noEmit` and `next build` all clean; `package.json` untouched. **Known gaps, all deliberate:** a link's URL is optional per the spec's literal validation list, so clearing it leaves the item rendering "No content" — arguably it should be required for that one type, and it is a one-line change if so; favorite, pin and delete stay `disabled` pending their own mutations; collections remain display-only in edit mode, shown rather than hidden so there is context to edit against; and the content textarea is still not a code editor. Process note: browser verification was done by the user rather than through Playwright at their request, so no in-session observations of the live form are recorded here — the automated checks above are what this session confirmed directly.
+- Delete item (`deleteItem` action + query, `DeleteItemDialog`): the drawer's `Trash2` button, `disabled` with "Deleting is coming soon" since the drawer shipped, now deletes the open item behind an `AlertDialog` that names it. `alert-dialog` was **already installed** from the profile page's delete-account flow, so unlike `sheet`, `skeleton` and `textarea` before it this feature ran no shadcn CLI at all — no new npm dependency, no migration, `package.json` untouched. **The query is `deleteMany`, not `delete`, and that is the one real decision in the data layer.** `delete` throws `P2025` when the row is missing, so distinguishing "already gone" from "the database fell over" would mean catching a Prisma error code; `deleteMany` reports it as a number. It also takes a plain filter, so the ownership check sits in the `where` (`{ id, userId }`) exactly as it does in `getItemById` and both of `updateItem`'s statements — never a test on the result, because a result-side check leaves a branch that could have returned someone else's row. The code reads `count > 0` where the spec said `count === 1`; `id` is the primary key so `deleteMany` can never match more than one, and `> 0` states the question actually being asked rather than leaning on that arithmetic. **No transaction and no relation cleanup**, which is worth stating because it looks like an omission: `ItemCollection.item` is `onDelete: Cascade` and the implicit `_ItemTags` join cascades too, so memberships and tag links go with the row, while the shared `Tag` rows are deliberately left alone — the same rule the edit write follows, orphan cleanup still being someone else's job. A comment says so, so nobody later adds a `tags: { set: [] }` that does nothing. The action mirrors `updateItem`'s guards — signed out, non-string/blank id, query-said-no, thrown — and `"This item no longer exists"` was extracted to a shared `MISSING_ITEM_MESSAGE` constant, the one line of this diff that reaches into `updateItem`; both test files still assert the literal independently, so changing the constant fails both. Missing and not-yours collapse into that single answer for the same reason the detail route answers 404 rather than 403. **The confirmation is one destructive button, not the account dialog's typed email** — typing an address out is the right weight for losing an entire account and far too much for one item, so what makes this deliberate is that the item is named and the button is destructive. Failure renders **inside the dialog** rather than as a toast: that is a deviation from the spec's "toast on success and error", and the same call made twice before (rate limiting, edit mode) — a refusal has to stay on screen next to the thing it is about, and inline is how every other form in this project reports one. The dialog is **controlled** rather than using the stock uncontrolled trigger, since success has to close it programmatically, and `handleOpenChange` returns early while `isDeleting` — Escape and the backdrop both route through it and neither should walk away from a request in flight, which is one step beyond the spec's "disable both buttons". Success sets `open` directly rather than through that guard, which is why it still closes. **On the three traps the spec flagged:** the trigger carries `type="button"` because it genuinely sits inside the drawer's edit `<form>` in the DOM; the dialog's own buttons are portalled out and have no form owner to submit, but carry it anyway rather than resting on that reasoning surviving a refactor. Delete needs nothing from the fetch — the id and title both arrive on the card — so unlike Edit it stays live during the skeleton, and it is absent in edit mode for free, the action bar being replaced by Save/Cancel there. **The `test` step added nothing and instead mutation-checked what existed**, which was the more useful move: changing the `where` to `{ id }` alone failed 2 tests, and removing the signed-out guard failed 1 on both of its assertions. That second one matters more than it looks — without the guard `userId` is `null` and `deleteMany({ where: { id, userId: null } })` is a filter, not a no-op; it deletes nothing today only because `Item.userId` is non-nullable, and the test does not rely on that holding. Tests went 116 → **127** (5 on the query, 6 on the action). One thing tsc proves that no test does: that `deleteMany` returns `{ count }` — the mock asserts that shape, so a wrong guess would pass the suite and break production, and the destructure being typechecked against the generated client is the actual guarantee. **Review caught three things.** A stale error sat on screen during a retry, so a previous "This item no longer exists" rendered directly above a button reading "Deleting…" — two contradictory claims at once; `handleConfirm` clears it now. The description interpolates a title that caps at 200 characters and need not contain a space into a `max-w-sm` popup, so it got `break-words`, which the drawer's own `SheetTitle` already carries for precisely that reason. And replacing the old button dropped its `title` attribute, leaving the trash as the only unlabeled control in a bar where Edit and Copy both show text; `title="Delete"` restored. **Known gaps, all deliberate:** no undo, since a soft-delete column is a schema change and a different feature; favorite and pin stay `disabled` pending their own mutations; no bulk delete and none from the card, `ItemCard`'s `actions` slot being left for favorite/pin/delete to be designed as one row rather than one at a time; and `isDeleting` may stay true briefly past the close because `router.refresh()` is called inside the transition scope, which would make the trigger inert — unreachable in practice, since the drawer is already closing and any refresh settles before another card can be opened. **Browser verification was the user's, at their request, and no results were reported back in-session** — so the nested-overlay z-index tie is *not* confirmed here. That is the one check offline tooling cannot make: the sheet and the alert dialog are both `z-50` and the dialog wins only because its portal is appended later, the identical DOM-order tie that hid the Copy toast until the viewport went to `z-[60]`. What this session confirmed directly is 127 tests, `tsc --noEmit`, `eslint` and `next build`, all clean.
