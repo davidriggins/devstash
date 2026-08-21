@@ -7,12 +7,17 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
  */
 vi.mock("@/lib/db/user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
-  prisma: { item: { findFirst: vi.fn() } },
+  prisma: {
+    item: { findFirst: vi.fn(), update: vi.fn() },
+    // The real one runs the callback against a transaction client; handing back
+    // the same mock keeps `tx.item.*` pointing at the spies asserted on below
+    $transaction: vi.fn(),
+  },
 }));
 
 const { getCurrentUserId } = await import("@/lib/db/user");
 const { prisma } = await import("@/lib/prisma");
-const { getItemById } = await import("@/lib/db/items");
+const { getItemById, updateItem } = await import("@/lib/db/items");
 
 /**
  * Untyped on purpose. `findFirst`'s own signature promises the full `Item`
@@ -21,6 +26,8 @@ const { getItemById } = await import("@/lib/db/items");
  * would mean listing columns this function never asks for.
  */
 const findFirst = prisma.item.findFirst as unknown as Mock;
+const update = prisma.item.update as unknown as Mock;
+const transaction = prisma.$transaction as unknown as Mock;
 
 const USER_ID = "user_1";
 
@@ -49,6 +56,10 @@ function itemRecord(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.mocked(getCurrentUserId).mockReset().mockResolvedValue(USER_ID);
   findFirst.mockReset().mockResolvedValue(itemRecord());
+  update.mockReset().mockResolvedValue(itemRecord());
+  transaction.mockReset().mockImplementation((run: (tx: unknown) => unknown) =>
+    run(prisma)
+  );
 });
 
 describe("getItemById", () => {
@@ -120,5 +131,146 @@ describe("getItemById", () => {
     const args = findFirst.mock.calls[0][0];
     expect(args?.select).toHaveProperty("collections");
     expect(args?.select).toHaveProperty("content");
+  });
+});
+
+const EDIT = {
+  title: "Renamed",
+  description: "New description",
+  content: "console.log(1)",
+  language: "javascript",
+  url: "https://example.com",
+  tags: ["react", "auth"],
+};
+
+/** The `data` argument of the single `item.update` call */
+function updateData() {
+  return update.mock.calls[0][0].data;
+}
+
+describe("updateItem", () => {
+  it("returns null without touching the database when nobody is signed in", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    expect(await updateItem("item_1", EDIT)).toBeNull();
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Both statements carry the ownership filter. The read alone would be enough
+   * today, but a `where: { id }` on the write is one refactor away from being
+   * the only check that ever ran — and that refactor would look harmless.
+   */
+  it("scopes both the read and the write to the signed-in user", async () => {
+    await updateItem("item_1", EDIT);
+
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "item_1", userId: USER_ID } })
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "item_1", userId: USER_ID } })
+    );
+  });
+
+  it("does not write when the item is missing or belongs to someone else", async () => {
+    findFirst.mockResolvedValue(null);
+
+    expect(await updateItem("item_1", EDIT)).toBeNull();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("runs the read and the write in one transaction", async () => {
+    await updateItem("item_1", EDIT);
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes title and description for every type", async () => {
+    findFirst.mockResolvedValue(itemRecord({ itemType: { name: "image" } }));
+
+    await updateItem("item_1", EDIT);
+
+    expect(updateData()).toMatchObject({
+      title: "Renamed",
+      description: "New description",
+    });
+  });
+
+  /**
+   * The type gate is the point of reading the row first. The form hides the
+   * fields a type does not own, but the payload arrives from a browser, so a
+   * link must not be able to smuggle `content` in and a snippet must not be
+   * able to set a `url`.
+   */
+  it("writes only the columns the item's own type owns", async () => {
+    const cases = [
+      { type: "snippet", writes: ["content", "language"], ignores: ["url"] },
+      { type: "prompt", writes: ["content"], ignores: ["url", "language"] },
+      { type: "command", writes: ["content", "language"], ignores: ["url"] },
+      { type: "note", writes: ["content"], ignores: ["url", "language"] },
+      { type: "link", writes: ["url"], ignores: ["content", "language"] },
+      { type: "file", writes: [], ignores: ["content", "url", "language"] },
+      { type: "image", writes: [], ignores: ["content", "url", "language"] },
+    ];
+
+    for (const { type, writes, ignores } of cases) {
+      update.mockClear();
+      findFirst.mockResolvedValue(itemRecord({ itemType: { name: type } }));
+
+      await updateItem("item_1", EDIT);
+
+      for (const field of writes) {
+        expect(updateData()).toHaveProperty(field);
+      }
+
+      for (const field of ignores) {
+        expect(updateData()).not.toHaveProperty(field);
+      }
+    }
+  });
+
+  /** An unrecognised type name falls back to note, which owns content only */
+  it("treats a type the UI has no constants for as a note", async () => {
+    findFirst.mockResolvedValue(itemRecord({ itemType: { name: "constructor" } }));
+
+    await updateItem("item_1", EDIT);
+
+    expect(updateData()).toHaveProperty("content");
+    expect(updateData()).not.toHaveProperty("url");
+  });
+
+  /**
+   * `set: []` before `connectOrCreate` in the same nested write, so the item's
+   * tag list is replaced rather than added to. The `Tag` rows are shared and
+   * are never deleted here.
+   */
+  it("replaces the tag list with connect-or-create", async () => {
+    await updateItem("item_1", EDIT);
+
+    expect(updateData().tags).toEqual({
+      set: [],
+      connectOrCreate: [
+        { where: { name: "react" }, create: { name: "react" } },
+        { where: { name: "auth" }, create: { name: "auth" } },
+      ],
+    });
+  });
+
+  it("clears every tag when none are given", async () => {
+    await updateItem("item_1", { ...EDIT, tags: [] });
+
+    expect(updateData().tags).toEqual({ set: [], connectOrCreate: [] });
+  });
+
+  it("returns the saved record flattened as an ItemDetail", async () => {
+    update.mockResolvedValue(
+      itemRecord({ title: "Renamed", tags: [{ name: "react" }] })
+    );
+
+    const saved = await updateItem("item_1", EDIT);
+
+    expect(saved?.title).toBe("Renamed");
+    expect(saved?.tags).toEqual(["react"]);
+    expect(saved?.collections).toEqual([{ id: "col_1", name: "React Patterns" }]);
   });
 });

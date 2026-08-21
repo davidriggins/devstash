@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { Copy, Pencil, Pin, Star, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  useEffect,
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { Copy, Pencil, Pin, Star, Trash2, X } from "lucide-react";
 
+import { updateItem } from "@/actions/items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Sheet,
   SheetContent,
@@ -12,8 +22,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import {
+  hasEditableField,
   ITEM_TYPE_BG_CLASSES,
   ITEM_TYPE_ICONS,
   ITEM_TYPE_LABELS,
@@ -42,8 +54,31 @@ function toItemDetail(raw: SerializedItemDetail): ItemDetail {
   };
 }
 
+/** The edit form's fields, all strings — an empty one means "clear this" */
+interface EditForm {
+  title: string;
+  description: string;
+  content: string;
+  language: string;
+  url: string;
+  /** Comma-separated; split on save, then normalized again by the schema */
+  tags: string;
+}
+
+function formFromDetail(detail: ItemDetail): EditForm {
+  return {
+    title: detail.title,
+    description: detail.description ?? "",
+    content: detail.content ?? "",
+    language: detail.language ?? "",
+    url: detail.url ?? "",
+    tags: detail.tags.join(", "),
+  };
+}
+
 /**
- * The item detail view. There is no item page — this drawer is it.
+ * The item detail view, and its edit mode. There is no item page — this drawer
+ * is it.
  *
  * `item` is the card data the page already has, so the header, tags and
  * description paint the moment the drawer opens; only the parts that need the
@@ -60,6 +95,8 @@ export function ItemDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const router = useRouter();
+
   /**
    * Carries the id it belongs to, so a result left over from the previously
    * opened item is identifiable rather than briefly rendered as this one's.
@@ -71,6 +108,17 @@ export function ItemDrawer({
     detail: ItemDetail | null;
     error: string | null;
   } | null>(null);
+
+  /**
+   * *Which* item is being edited, rather than a boolean. Same trick as `result`
+   * above, and it does the resetting for free: opening a different card or
+   * closing the drawer changes `itemId`, and edit mode simply stops matching.
+   * No effect, and no way to reopen into a half-finished form.
+   */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<EditForm | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, startSaving] = useTransition();
 
   const itemId = open ? item?.id : undefined;
 
@@ -118,11 +166,24 @@ export function ItemDrawer({
   const error = loaded?.error ?? null;
   const isLoading = loaded === null;
 
+  const isEditing = editingId !== null && editingId === itemId && form !== null;
+
+  /**
+   * Prefer the fetched record over the card once it has arrived.
+   *
+   * Not a detail: after a save, `item` is still the card the page rendered
+   * before the edit — it is client state in `ItemList`, so `router.refresh()`
+   * does not reach it. Reading the title from `item` would show the old one
+   * back and make a successful save look like it did nothing.
+   */
+  const title = detail?.title ?? item?.title ?? "";
+  const description = detail ? detail.description : (item?.description ?? null);
+  const tags = detail ? detail.tags : (item?.tags ?? []);
+
   async function handleCopy() {
     // Falls back to the title only when there is genuinely nothing else — a
     // link's URL and a file's name are the useful thing to put on the clipboard
-    const text =
-      detail?.content ?? detail?.url ?? detail?.fileName ?? item?.title;
+    const text = detail?.content ?? detail?.url ?? detail?.fileName ?? title;
 
     if (!text) return;
 
@@ -134,8 +195,67 @@ export function ItemDrawer({
     }
   }
 
-  const type = item?.type ?? "note";
+  function startEditing() {
+    if (!detail) return;
+
+    // Seeded at the click rather than in an effect: the values exist already,
+    // and there is exactly one moment the form should be reset to them
+    setForm(formFromDetail(detail));
+    setSaveError(null);
+    setEditingId(detail.id);
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setForm(null);
+    setSaveError(null);
+  }
+
+  function handleSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!form || !editingId) return;
+
+    startSaving(async () => {
+      // Every field goes, including the ones this type does not render. The
+      // server decides which columns a snippet or a link is allowed to write;
+      // sending only what was shown would make that the client's call.
+      const saved = await updateItem(editingId, {
+        title: form.title,
+        description: form.description,
+        content: form.content,
+        language: form.language,
+        url: form.url,
+        tags: form.tags.split(","),
+      });
+
+      if (!saved.success || !saved.data) {
+        setSaveError(saved.error ?? "Could not save this item. Try again.");
+        return;
+      }
+
+      // Straight into the fetch state: the action returns the whole record, so
+      // there is nothing left to go and ask for
+      setResult({ id: editingId, detail: saved.data, error: null });
+      setEditingId(null);
+      setForm(null);
+      setSaveError(null);
+
+      toast.add({ title: "Changes saved", type: "success" });
+
+      // The cards behind the drawer are server-rendered, so they only catch up
+      // when the page re-renders
+      router.refresh();
+    });
+  }
+
+  function updateField(field: keyof EditForm, value: string) {
+    setForm((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  const type = detail?.type ?? item?.type ?? "note";
   const Icon = ITEM_TYPE_ICONS[type];
+  const canSave = Boolean(form?.title.trim()) && !isSaving;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -147,7 +267,13 @@ export function ItemDrawer({
           stock three quarters: this is the whole item, not a peek at it. */}
       <SheetContent className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl">
         {item && (
-          <>
+          // One form spanning header and body, because Save sits in the action
+          // bar at the top while the inputs are in the scrolling area below
+          <form
+            onSubmit={handleSave}
+            className="flex min-h-0 flex-1 flex-col"
+            noValidate
+          >
             <div className="border-b border-foreground/10 p-6 pr-14">
               <div className="flex items-start gap-4">
                 <span
@@ -163,89 +289,146 @@ export function ItemDrawer({
 
                 <div className="min-w-0 flex-1">
                   <SheetTitle className="text-lg leading-tight break-words">
-                    {item.title}
+                    {isEditing ? "Edit item" : title}
                   </SheetTitle>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {/* The type is fixed for the life of the item, so it stays
+                        a badge in edit mode rather than becoming a select */}
                     <Badge variant="secondary">{ITEM_TYPE_LABELS[type]}</Badge>
-                    {detail?.language && (
+                    {detail?.language && !isEditing && (
                       <Badge variant="outline">{detail.language}</Badge>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Every control but Copy needs a mutation, and mutations belong
-                  to the CRUD feature. Disabled rather than silently inert: a
-                  button that looks live and does nothing is the worse lie. */}
-              <div className="mt-5 flex flex-wrap items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled
-                  title="Favorites are coming soon"
-                >
-                  <Star
-                    className={cn(
-                      "size-4",
-                      item.isFavorite && "fill-yellow-400 text-yellow-400"
-                    )}
-                  />
-                  Favorite
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled
-                  title="Pinning is coming soon"
-                >
-                  <Pin
-                    className={cn("size-4", item.isPinned && "text-foreground")}
-                  />
-                  Pin
-                </Button>
-
-                <Button variant="ghost" size="sm" onClick={handleCopy}>
-                  <Copy className="size-4" />
-                  Copy
-                </Button>
-
-                <div className="ml-auto flex items-center gap-1">
+              {isEditing ? (
+                <div className="mt-5 flex flex-wrap items-center gap-2">
                   <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={cancelEditing}
+                    disabled={isSaving}
+                  >
+                    <X className="size-4" />
+                    Cancel
+                  </Button>
+
+                  <Button type="submit" size="sm" disabled={!canSave}>
+                    {isSaving ? "Saving…" : "Save"}
+                  </Button>
+
+                  {/* Inline rather than a toast: a validation message has to
+                      stay on screen next to the field it is about, and this is
+                      how every other form in the project reports a refusal */}
+                  {saveError && (
+                    <p
+                      role="alert"
+                      className="w-full text-sm text-destructive"
+                    >
+                      {saveError}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                /* Favorite, pin and delete each need a mutation of their own,
+                   and those belong to the CRUD feature. Disabled rather than
+                   silently inert: a button that looks live and does nothing is
+                   the worse lie. */
+                <div className="mt-5 flex flex-wrap items-center gap-1">
+                  <Button
+                    type="button"
                     variant="ghost"
                     size="sm"
                     disabled
-                    title="Editing is coming soon"
+                    title="Favorites are coming soon"
                   >
-                    <Pencil className="size-4" />
-                    Edit
+                    <Star
+                      className={cn(
+                        "size-4",
+                        item.isFavorite && "fill-yellow-400 text-yellow-400"
+                      )}
+                    />
+                    Favorite
                   </Button>
 
                   <Button
+                    type="button"
                     variant="ghost"
-                    size="icon-sm"
+                    size="sm"
                     disabled
-                    title="Deleting is coming soon"
-                    className="text-destructive"
+                    title="Pinning is coming soon"
                   >
-                    <Trash2 className="size-4" />
-                    <span className="sr-only">Delete</span>
+                    <Pin
+                      className={cn("size-4", item.isPinned && "text-foreground")}
+                    />
+                    Pin
                   </Button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopy}
+                  >
+                    <Copy className="size-4" />
+                    Copy
+                  </Button>
+
+                  <div className="ml-auto flex items-center gap-1">
+                    {/* Nothing to edit until the record arrives: content,
+                        language and the URL only exist in the fetched detail,
+                        so a form opened before it lands would start blank and
+                        save those fields away */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={startEditing}
+                      disabled={!detail}
+                      title={
+                        detail ? undefined : "Still loading this item"
+                      }
+                    >
+                      <Pencil className="size-4" />
+                      Edit
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled
+                      title="Deleting is coming soon"
+                      className="text-destructive"
+                    >
+                      <Trash2 className="size-4" />
+                      <span className="sr-only">Delete</span>
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="flex-1 space-y-6 overflow-y-auto p-6">
-              {error ? (
+              {isEditing && form ? (
+                <EditFields
+                  form={form}
+                  type={type}
+                  disabled={isSaving}
+                  onChange={updateField}
+                />
+              ) : error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : (
                 <>
-                  {item.description && (
+                  {description && (
                     <section>
                       <SectionLabel>Description</SectionLabel>
                       <SheetDescription className="text-foreground">
-                        {item.description}
+                        {description}
                       </SheetDescription>
                     </section>
                   )}
@@ -263,11 +446,11 @@ export function ItemDrawer({
                     )}
                   </section>
 
-                  {item.tags.length > 0 && (
+                  {tags.length > 0 && (
                     <section>
                       <SectionLabel>Tags</SectionLabel>
                       <div className="flex flex-wrap gap-1.5">
-                        {item.tags.map((tag) => (
+                        {tags.map((tag) => (
                           <Badge key={tag} variant="secondary">
                             {tag}
                           </Badge>
@@ -275,7 +458,14 @@ export function ItemDrawer({
                       </div>
                     </section>
                   )}
+                </>
+              )}
 
+              {/* Below the fold in both modes: collections and the dates are
+                  display-only, so edit mode shows them rather than hiding
+                  context the person is editing against */}
+              {!error && (
+                <>
                   <section>
                     <SectionLabel>Collections</SectionLabel>
                     {isLoading ? (
@@ -300,7 +490,9 @@ export function ItemDrawer({
                     <dl className="space-y-1.5 text-sm">
                       <DetailRow
                         label="Created"
-                        value={fullDateFormatter.format(item.createdAt)}
+                        value={fullDateFormatter.format(
+                          detail?.createdAt ?? item.createdAt
+                        )}
                       />
                       <DetailRow
                         label="Updated"
@@ -317,10 +509,128 @@ export function ItemDrawer({
                 </>
               )}
             </div>
-          </>
+          </form>
         )}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * The editable fields for one item type.
+ *
+ * Which type-specific inputs appear is read from `ITEM_TYPE_EDITABLE_FIELDS`,
+ * the same table the update query checks — so the form cannot offer a field the
+ * write would then discard, and neither one can be changed without the other.
+ */
+function EditFields({
+  form,
+  type,
+  disabled,
+  onChange,
+}: {
+  form: EditForm;
+  type: DashboardItem["type"];
+  disabled: boolean;
+  onChange: (field: keyof EditForm, value: string) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <Field htmlFor="item-title" label="Title">
+        <Input
+          id="item-title"
+          value={form.title}
+          onChange={(event) => onChange("title", event.target.value)}
+          disabled={disabled}
+          required
+          autoFocus
+        />
+      </Field>
+
+      <Field htmlFor="item-description" label="Description">
+        <Textarea
+          id="item-description"
+          value={form.description}
+          onChange={(event) => onChange("description", event.target.value)}
+          disabled={disabled}
+          rows={2}
+          placeholder="What is this for?"
+        />
+      </Field>
+
+      {hasEditableField(type, "content") && (
+        <Field htmlFor="item-content" label="Content">
+          <Textarea
+            id="item-content"
+            value={form.content}
+            onChange={(event) => onChange("content", event.target.value)}
+            disabled={disabled}
+            rows={12}
+            spellCheck={false}
+            className="font-mono text-xs leading-relaxed"
+          />
+        </Field>
+      )}
+
+      {hasEditableField(type, "language") && (
+        <Field htmlFor="item-language" label="Language">
+          <Input
+            id="item-language"
+            value={form.language}
+            onChange={(event) => onChange("language", event.target.value)}
+            disabled={disabled}
+            placeholder="typescript"
+          />
+        </Field>
+      )}
+
+      {hasEditableField(type, "url") && (
+        <Field htmlFor="item-url" label="URL">
+          <Input
+            id="item-url"
+            type="url"
+            value={form.url}
+            onChange={(event) => onChange("url", event.target.value)}
+            disabled={disabled}
+            placeholder="https://example.com"
+          />
+        </Field>
+      )}
+
+      <Field
+        htmlFor="item-tags"
+        label="Tags"
+        hint="Separated by commas. Tags are stored in lower case."
+      >
+        <Input
+          id="item-tags"
+          value={form.tags}
+          onChange={(event) => onChange("tags", event.target.value)}
+          disabled={disabled}
+          placeholder="react, hooks"
+        />
+      </Field>
+    </div>
+  );
+}
+
+function Field({
+  htmlFor,
+  label,
+  hint,
+  children,
+}: {
+  htmlFor: string;
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor}>{label}</Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
   );
 }
 
@@ -392,4 +702,3 @@ function ItemContent({ detail }: { detail: ItemDetail | null }) {
 
   return <p className="text-sm text-muted-foreground">No content</p>;
 }
-
