@@ -2,11 +2,13 @@
 
 import { useId, type ReactNode } from "react";
 
+import { CodeEditor } from "@/components/items/CodeEditor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   hasEditableField,
+  usesCodeEditor,
   type ItemTypeName,
 } from "@/lib/constants/item-types";
 
@@ -87,19 +89,33 @@ export function ItemFields({
         />
       </Field>
 
-      {hasEditableField(type, "content") && (
-        <Field htmlFor={`${id}-content`} label="Content">
-          <Textarea
-            id={`${id}-content`}
-            value={values.content}
-            onChange={(event) => onChange("content", event.target.value)}
-            disabled={disabled}
-            rows={12}
-            spellCheck={false}
-            className="font-mono text-xs leading-relaxed"
-          />
-        </Field>
-      )}
+      {hasEditableField(type, "content") &&
+        (usesCodeEditor(type) ? (
+          // Code types get the editor; prose types keep the textarea. The
+          // language field below feeds it live, so highlighting follows what is
+          // typed there
+          <Field label="Content">
+            <CodeEditor
+              value={values.content}
+              language={values.language || null}
+              onChange={(next) => onChange("content", next)}
+              readOnly={disabled}
+              ariaLabel="Content"
+            />
+          </Field>
+        ) : (
+          <Field htmlFor={`${id}-content`} label="Content">
+            <Textarea
+              id={`${id}-content`}
+              value={values.content}
+              onChange={(event) => onChange("content", event.target.value)}
+              disabled={disabled}
+              rows={12}
+              spellCheck={false}
+              className="font-mono text-xs leading-relaxed"
+            />
+          </Field>
+        ))}
 
       {hasEditableField(type, "language") && (
         <Field htmlFor={`${id}-language`} label="Language">
@@ -150,14 +166,24 @@ export function Field({
   hint,
   children,
 }: {
-  htmlFor: string;
+  /** Omitted when the control owns its own labelling, as Monaco does */
+  htmlFor?: string;
   label: string;
   hint?: string;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
+      {htmlFor ? (
+        <Label htmlFor={htmlFor}>{label}</Label>
+      ) : (
+        // A caption rather than a <label>: there is no id to point `for` at,
+        // because Monaco creates its own textarea. That control is named by the
+        // `aria-label` the editor is given instead.
+        <span className="text-sm leading-none font-medium select-none">
+          {label}
+        </span>
+      )}
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>

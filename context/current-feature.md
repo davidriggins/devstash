@@ -1,16 +1,70 @@
-# Current Feature
+# Current Feature: Code Editor (Monaco)
 
 ## Status
 
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Add a `CodeEditor` component built on Monaco Editor, dark theme
+- Use it in place of `Textarea` for **snippets and commands only**
+- Keep `Textarea` for notes, prompts and every other non-code type
+- macOS-style window dots (red/yellow/green) across the top of the editor
+- A quick copy button in the editor header
+- The language shown in the editor header, next to copy
+- Support both display (readonly) and edit modes
+- Fluid height capped at 400px, with a scrollbar styled to match the theme
 
 ## Notes
 
-<!-- Any extra notes -->
+Source spec: `context/features/code-editor-spec.md`
+
+**Three call sites, not one.** The content field is rendered by `ItemFields`
+(shared by the create dialog and the drawer's edit form) and read-only by
+`ItemContent` inside `ItemDrawer`. Both need to route code types to the new
+component and leave the others on `Textarea`/`<pre>`.
+
+**"Snippets and commands only" is a new distinction and should be a table, not
+a conditional** — the same rule `ITEM_TYPE_EDITABLE_FIELDS` and
+`ITEM_TYPE_CONTENT_TYPES` already follow. It looks derivable rather than
+listable: snippet and command are exactly the types holding both `content` and
+`language`, while prompt and note have `content` alone. Deriving it means a
+future code-ish type is picked up without anyone remembering to, matching how
+`CREATABLE_ITEM_TYPES` is filtered rather than enumerated. Decide at
+implementation; if derivation reads as too clever, an explicit list is fine, but
+it belongs in `src/lib/constants/item-types.ts` either way.
+
+**This is a real npm dependency**, unlike `sheet`, `skeleton`, `textarea`,
+`dialog`, `select` and `alert-dialog`, which all came from the shadcn CLI with
+nothing added. Monaco is heavy, and `@monaco-editor/react` loads the editor
+from a CDN by default — that has to be pointed at a bundled copy, or the editor
+dies offline and on a locked-down network. Load it lazily so a note or a link
+never pays for it.
+
+**Monaco touches `window` on mount**, so it needs `ssr: false`; the two parents
+are already `"use client"`, but client components still render on the server for
+the initial HTML.
+
+**`Item.language` is free text** — a user can type "TS" or leave it blank, and
+Monaco wants a real language id. That mapping is the one piece of genuinely
+testable logic here, so it belongs in `src/lib/` with a plaintext fallback,
+following `formatFileSize` moving to `src/lib/format.ts` for the same reason.
+Components stay browser-verified.
+
+**Copy already exists in the drawer's action bar** (`content ?? url ?? fileName
+?? title`, with a toast). A second copy button inside the editor header overlaps
+it in display mode; keep the toast consistent and accept the duplication, since
+in edit and create there is no other copy control.
+
+**Height**: Monaco does not size to content on its own — read the content height
+on mount and on change, clamp to 400px, and set `scrollBeyondLastLine: false`.
+Its scrollbars are rendered internally, so theming them means Monaco theme
+tokens rather than CSS.
+
+The window dots are decorative and should be hidden from assistive tech. Dark
+mode is the default here but light mode exists; the spec asks for a dark editor,
+so a fixed dark theme is acceptable — worth a look in light mode before calling
+it done.
 
 ## History
 

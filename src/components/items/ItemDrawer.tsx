@@ -11,6 +11,7 @@ import {
 import { Copy, Pencil, Pin, Star, X } from "lucide-react";
 
 import { updateItem } from "@/actions/items";
+import { CodeEditor } from "@/components/items/CodeEditor";
 import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
 import { ItemFields, type ItemFormValues } from "@/components/items/ItemFields";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import {
   ITEM_TYPE_ICONS,
   ITEM_TYPE_LABELS,
   ITEM_TYPE_TEXT_CLASSES,
+  usesCodeEditor,
 } from "@/lib/constants/item-types";
 import { formatFileSize } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -548,6 +550,19 @@ function ItemContent({ detail }: { detail: ItemDetail | null }) {
   if (!detail) return null;
 
   if (detail.content) {
+    // Code reads in the editor, prose reads as prose: a note or a prompt in a
+    // gutter-and-line-numbers window would be pointlessly hostile
+    if (usesCodeEditor(detail.type)) {
+      return (
+        <CodeEditor
+          value={detail.content}
+          language={detail.language}
+          readOnly
+          ariaLabel={`Content of ${detail.title}`}
+        />
+      );
+    }
+
     return (
       <pre className="max-h-96 overflow-auto rounded-xl border border-foreground/10 bg-muted/40 p-4 text-xs leading-relaxed">
         <code>{detail.content}</code>

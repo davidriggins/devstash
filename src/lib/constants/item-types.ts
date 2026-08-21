@@ -77,6 +77,24 @@ export function hasEditableField(
 }
 
 /**
+ * Whether this type's content is code, and so gets the code editor rather than
+ * a plain textarea.
+ *
+ * Derived rather than listed, for the same reason `CREATABLE_ITEM_TYPES` is a
+ * filter: a code type is one that carries a `language` alongside its `content`,
+ * which is snippet and command today — prompt and note have content alone, and
+ * prose does not want line numbers. A future type that stores a language is
+ * picked up here without anyone remembering to, and one that stops storing a
+ * language drops out on its own.
+ */
+export function usesCodeEditor(type: ItemTypeName): boolean {
+  return hasEditableField(type, "content") && hasEditableField(type, "language");
+}
+
+/** The code types in canonical order */
+export const CODE_ITEM_TYPES = ITEM_TYPE_NAMES.filter(usesCodeEditor);
+
+/**
  * Which content column is authoritative for each type.
  *
  * `Item.contentType` is a required enum and **the schema does not tie it to the
