@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { FolderPlus, Layers, Plus, Search } from "lucide-react";
+import { FolderPlus, Layers, Search } from "lucide-react";
 
+import { NewItemDialog } from "@/components/items/NewItemDialog";
 import { EnvironmentBadge } from "@/components/layout/EnvironmentBadge";
 import { SidebarToggle } from "@/components/layout/SidebarToggle";
 import { Button } from "@/components/ui/button";
@@ -45,10 +46,9 @@ export function Topbar() {
           <FolderPlus />
           New Collection
         </Button>
-        <Button size="lg" className="rounded-xl">
-          <Plus />
-          New Item
-        </Button>
+        {/* Its own client component: this file stays a server component so
+            EnvironmentBadge can keep reading DATABASE_URL on the server */}
+        <NewItemDialog />
       </div>
     </header>
   );

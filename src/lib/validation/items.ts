@@ -1,9 +1,11 @@
 import { z } from "zod";
 
+import { isCreatableItemType } from "@/lib/constants/item-types";
+
 /**
- * The rules for editing an item. The drawer's edit form is the only caller
- * today, but it parses input that reached the server from a browser, so this is
- * the source of truth rather than a second opinion on what the form allowed.
+ * The rules for writing an item, shared by the create dialog and the drawer's
+ * edit form. Both parse input that reached the server from a browser, so this
+ * is the source of truth rather than a second opinion on what a form allowed.
  */
 
 export const TITLE_MAX_LENGTH = 200;
@@ -77,7 +79,14 @@ const optionalUrl = z
   .pipe(z.union([z.literal(""), z.url("Enter a valid URL")]))
   .transform((value) => (value === "" ? null : value));
 
-export const updateItemSchema = z.object({
+/**
+ * The fields every item carries, whatever its type.
+ *
+ * Spread into both schemas rather than written twice: a rule that lived in one
+ * of them would mean an item could be created in a state it could never be
+ * edited back into, or the reverse.
+ */
+const itemFields = {
   title: z
     .string()
     .trim()
@@ -88,7 +97,9 @@ export const updateItemSchema = z.object({
   language: optionalText(LANGUAGE_MAX_LENGTH, "Language"),
   url: optionalUrl,
   tags: tagsSchema,
-});
+} as const;
+
+export const updateItemSchema = z.object(itemFields);
 
 /**
  * What the update query receives: every field resolved, nothing optional left.
@@ -96,3 +107,46 @@ export const updateItemSchema = z.object({
  * item type's decision, made at the write against `ITEM_TYPE_EDITABLE_FIELDS`.
  */
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;
+
+/** Shown when the submitted type is unknown, or is one that needs an upload */
+export const INVALID_ITEM_TYPE_MESSAGE = "Choose a type for this item";
+
+/**
+ * Creating adds one field the edit form has no equivalent for: the type, which
+ * is chosen once and then fixed for the life of the item.
+ *
+ * It is validated through `isCreatableItemType` rather than against the full
+ * list of type names — a file or image needs `fileUrl`, `fileName` and
+ * `fileSize`, which come from an upload that does not exist yet, so one
+ * submitted here would produce a `FILE` row with no file in it.
+ */
+export const createItemSchema = z
+  .object({
+    type: z.string().refine(isCreatableItemType, INVALID_ITEM_TYPE_MESSAGE),
+    ...itemFields,
+  })
+  /**
+   * A link with no URL is the one type-specific rule worth enforcing here: it
+   * is the whole content of the item, and `optionalUrl` allows empty so that
+   * the other six types (which never render the field) can leave it blank.
+   *
+   * Note this is stricter than `updateItemSchema`, which still lets a link's
+   * URL be cleared — a known gap recorded when edit mode shipped, left alone
+   * rather than widening this feature's footprint.
+   */
+  .superRefine((data, ctx) => {
+    if (data.type === "link" && data.url === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["url"],
+        message: "A link needs a URL",
+      });
+    }
+  });
+
+/**
+ * What the create query receives. Same resolved shape as `UpdateItemInput`
+ * plus the type, and again it is the type — not the caller — that decides
+ * which of `content`, `language` and `url` are actually written.
+ */
+export type CreateItemInput = z.infer<typeof createItemSchema>;

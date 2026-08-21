@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CONTENT_MAX_LENGTH,
+  createItemSchema,
   MAX_TAGS,
   TITLE_MAX_LENGTH,
   updateItemSchema,
@@ -139,6 +140,130 @@ describe("updateItemSchema", () => {
 
     it("rejects a non-array", () => {
       expect(parse({ tags: "react, hooks" }).success).toBe(false);
+    });
+  });
+});
+
+/** What the create dialog sends: the same fields, plus the chosen type */
+function createPayload(overrides: Record<string, unknown> = {}) {
+  return { type: "snippet", ...payload(overrides) };
+}
+
+function parseCreate(overrides: Record<string, unknown> = {}) {
+  return createItemSchema.safeParse(createPayload(overrides));
+}
+
+describe("createItemSchema", () => {
+  describe("type", () => {
+    it("accepts every type that can be created by typing", () => {
+      for (const type of ["snippet", "prompt", "command", "note", "link"]) {
+        // A link needs a URL, which the rule below covers on its own
+        const url = type === "link" ? "https://example.com" : "";
+
+        expect(parseCreate({ type, url }).success).toBe(true);
+      }
+    });
+
+    /**
+     * File and image are real item types, and they are still refused here: both
+     * need `fileUrl`, `fileName` and `fileSize`, which come from an upload that
+     * does not exist. One created through this path would be a `FILE` row with
+     * no file in it.
+     */
+    it("rejects the types that need an upload", () => {
+      expect(parseCreate({ type: "file" }).success).toBe(false);
+      expect(parseCreate({ type: "image" }).success).toBe(false);
+    });
+
+    it("rejects an unknown type", () => {
+      for (const type of ["widget", "", "SNIPPET", "Snippet"]) {
+        expect(parseCreate({ type }).success).toBe(false);
+      }
+    });
+
+    /**
+     * The type arrives from a form, so the prototype-chain trap applies here as
+     * much as it does to a route param: a plain-object lookup would answer
+     * `"constructor"` with a function, and it would be truthy.
+     */
+    it("rejects inherited property names", () => {
+      for (const type of [
+        "constructor",
+        "__proto__",
+        "toString",
+        "hasOwnProperty",
+      ]) {
+        expect(parseCreate({ type }).success).toBe(false);
+      }
+    });
+
+    it("rejects a missing or non-string type", () => {
+      expect(createItemSchema.safeParse(payload()).success).toBe(false);
+      expect(parseCreate({ type: 1 }).success).toBe(false);
+      expect(parseCreate({ type: null }).success).toBe(false);
+    });
+  });
+
+  describe("link URL", () => {
+    /**
+     * The one type-specific rule enforced here rather than at the write. A link
+     * with no URL has no content at all, and `optionalUrl` has to allow empty
+     * so the six types that never render the field can leave it blank.
+     */
+    it("requires a URL when the type is link", () => {
+      expect(parseCreate({ type: "link", url: "" }).success).toBe(false);
+      expect(parseCreate({ type: "link", url: "   " }).success).toBe(false);
+      expect(
+        parseCreate({ type: "link", url: "https://example.com" }).success
+      ).toBe(true);
+    });
+
+    it("reports the missing URL against the url field", () => {
+      const result = parseCreate({ type: "link", url: "" });
+
+      expect(result.error?.issues[0]?.path).toEqual(["url"]);
+    });
+
+    /** A malformed URL is still malformed, not merely missing */
+    it("still rejects a half-typed URL for a link", () => {
+      expect(parseCreate({ type: "link", url: "http" }).success).toBe(false);
+    });
+
+    it("leaves the URL optional for every other type", () => {
+      for (const type of ["snippet", "prompt", "command", "note"]) {
+        const result = parseCreate({ type, url: "" });
+
+        expect(result.success).toBe(true);
+        expect(result.data?.url).toBeNull();
+      }
+    });
+  });
+
+  /**
+   * Both schemas spread the same field definitions, so these are here to catch
+   * that spread being broken rather than to re-test the rules themselves.
+   */
+  describe("fields shared with updateItemSchema", () => {
+    it("applies the same title rules", () => {
+      expect(parseCreate({ title: "   " }).success).toBe(false);
+      expect(parseCreate({ title: "  Padded  " }).data?.title).toBe("Padded");
+      expect(
+        parseCreate({ title: "a".repeat(TITLE_MAX_LENGTH + 1) }).success
+      ).toBe(false);
+    });
+
+    it("applies the same empty-to-null transform", () => {
+      const result = parseCreate({ description: "  ", content: "", language: "" });
+
+      expect(result.data?.description).toBeNull();
+      expect(result.data?.content).toBeNull();
+      expect(result.data?.language).toBeNull();
+    });
+
+    it("applies the same tag normalization", () => {
+      expect(
+        parseCreate({ tags: [" React ", "REACT", "", "hooks"] }).data?.tags
+      ).toEqual(["react", "hooks"]);
     });
   });
 });

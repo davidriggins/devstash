@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import {
@@ -12,10 +12,9 @@ import { Copy, Pencil, Pin, Star, X } from "lucide-react";
 
 import { updateItem } from "@/actions/items";
 import { DeleteItemDialog } from "@/components/items/DeleteItemDialog";
+import { ItemFields, type ItemFormValues } from "@/components/items/ItemFields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Sheet,
   SheetContent,
@@ -23,10 +22,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import {
-  hasEditableField,
   ITEM_TYPE_BG_CLASSES,
   ITEM_TYPE_ICONS,
   ITEM_TYPE_LABELS,
@@ -55,18 +52,7 @@ function toItemDetail(raw: SerializedItemDetail): ItemDetail {
   };
 }
 
-/** The edit form's fields, all strings — an empty one means "clear this" */
-interface EditForm {
-  title: string;
-  description: string;
-  content: string;
-  language: string;
-  url: string;
-  /** Comma-separated; split on save, then normalized again by the schema */
-  tags: string;
-}
-
-function formFromDetail(detail: ItemDetail): EditForm {
+function formFromDetail(detail: ItemDetail): ItemFormValues {
   return {
     title: detail.title,
     description: detail.description ?? "",
@@ -78,7 +64,7 @@ function formFromDetail(detail: ItemDetail): EditForm {
 }
 
 /**
- * The item detail view, and its edit mode. There is no item page — this drawer
+ * The item detail view, and its edit mode. There is no item page â€” this drawer
  * is it.
  *
  * `item` is the card data the page already has, so the header, tags and
@@ -117,7 +103,7 @@ export function ItemDrawer({
    * No effect, and no way to reopen into a half-finished form.
    */
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<EditForm | null>(null);
+  const [form, setForm] = useState<ItemFormValues | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
 
@@ -173,7 +159,7 @@ export function ItemDrawer({
    * Prefer the fetched record over the card once it has arrived.
    *
    * Not a detail: after a save, `item` is still the card the page rendered
-   * before the edit — it is client state in `ItemList`, so `router.refresh()`
+   * before the edit â€” it is client state in `ItemList`, so `router.refresh()`
    * does not reach it. Reading the title from `item` would show the old one
    * back and make a successful save look like it did nothing.
    */
@@ -182,7 +168,7 @@ export function ItemDrawer({
   const tags = detail ? detail.tags : (item?.tags ?? []);
 
   async function handleCopy() {
-    // Falls back to the title only when there is genuinely nothing else — a
+    // Falls back to the title only when there is genuinely nothing else â€” a
     // link's URL and a file's name are the useful thing to put on the clipboard
     const text = detail?.content ?? detail?.url ?? detail?.fileName ?? title;
 
@@ -256,7 +242,7 @@ export function ItemDrawer({
    * and the refresh is what removes the card the drawer was opened from.
    *
    * `result` still holds the deleted record afterwards, and `selected` in
-   * `ItemList` still points at it — both harmless. The panel is closing, and
+   * `ItemList` still points at it â€” both harmless. The panel is closing, and
    * once the refresh lands there is no card left to reopen it from.
    */
   function handleDeleted() {
@@ -265,7 +251,7 @@ export function ItemDrawer({
     router.refresh();
   }
 
-  function updateField(field: keyof EditForm, value: string) {
+  function updateField(field: keyof ItemFormValues, value: string) {
     setForm((current) => (current ? { ...current, [field]: value } : current));
   }
 
@@ -277,7 +263,7 @@ export function ItemDrawer({
     <Sheet open={open} onOpenChange={onOpenChange}>
       {/* Both width overrides have to carry `data-[side=right]:` to match the
           specificity of SheetContent's own `data-[side=right]:w-3/4` and
-          `data-[side=right]:sm:max-w-sm` — plain utilities lose to the
+          `data-[side=right]:sm:max-w-sm` â€” plain utilities lose to the
           attribute selector and the panel stays 384px wide, narrow enough that
           a line of code barely fits. Full width on a phone rather than the
           stock three quarters: this is the whole item, not a peek at it. */}
@@ -333,7 +319,7 @@ export function ItemDrawer({
                   </Button>
 
                   <Button type="submit" size="sm" disabled={!canSave}>
-                    {isSaving ? "Saving…" : "Save"}
+                    {isSaving ? "Savingâ€¦" : "Save"}
                   </Button>
 
                   {/* Inline rather than a toast: a validation message has to
@@ -413,7 +399,7 @@ export function ItemDrawer({
                     </Button>
 
                     {/* Unlike Edit, this needs nothing the fetch is waiting
-                        for — the id and the title both came in on the card, so
+                        for â€” the id and the title both came in on the card, so
                         it stays usable while the body is still a skeleton */}
                     <DeleteItemDialog
                       itemId={item.id}
@@ -427,11 +413,12 @@ export function ItemDrawer({
 
             <div className="flex-1 space-y-6 overflow-y-auto p-6">
               {isEditing && form ? (
-                <EditFields
-                  form={form}
+                <ItemFields
+                  values={form}
                   type={type}
                   disabled={isSaving}
                   onChange={updateField}
+                  autoFocus
                 />
               ) : error ? (
                 <p className="text-sm text-destructive">{error}</p>
@@ -529,124 +516,6 @@ export function ItemDrawer({
   );
 }
 
-/**
- * The editable fields for one item type.
- *
- * Which type-specific inputs appear is read from `ITEM_TYPE_EDITABLE_FIELDS`,
- * the same table the update query checks — so the form cannot offer a field the
- * write would then discard, and neither one can be changed without the other.
- */
-function EditFields({
-  form,
-  type,
-  disabled,
-  onChange,
-}: {
-  form: EditForm;
-  type: DashboardItem["type"];
-  disabled: boolean;
-  onChange: (field: keyof EditForm, value: string) => void;
-}) {
-  return (
-    <div className="space-y-5">
-      <Field htmlFor="item-title" label="Title">
-        <Input
-          id="item-title"
-          value={form.title}
-          onChange={(event) => onChange("title", event.target.value)}
-          disabled={disabled}
-          required
-          autoFocus
-        />
-      </Field>
-
-      <Field htmlFor="item-description" label="Description">
-        <Textarea
-          id="item-description"
-          value={form.description}
-          onChange={(event) => onChange("description", event.target.value)}
-          disabled={disabled}
-          rows={2}
-          placeholder="What is this for?"
-        />
-      </Field>
-
-      {hasEditableField(type, "content") && (
-        <Field htmlFor="item-content" label="Content">
-          <Textarea
-            id="item-content"
-            value={form.content}
-            onChange={(event) => onChange("content", event.target.value)}
-            disabled={disabled}
-            rows={12}
-            spellCheck={false}
-            className="font-mono text-xs leading-relaxed"
-          />
-        </Field>
-      )}
-
-      {hasEditableField(type, "language") && (
-        <Field htmlFor="item-language" label="Language">
-          <Input
-            id="item-language"
-            value={form.language}
-            onChange={(event) => onChange("language", event.target.value)}
-            disabled={disabled}
-            placeholder="typescript"
-          />
-        </Field>
-      )}
-
-      {hasEditableField(type, "url") && (
-        <Field htmlFor="item-url" label="URL">
-          <Input
-            id="item-url"
-            type="url"
-            value={form.url}
-            onChange={(event) => onChange("url", event.target.value)}
-            disabled={disabled}
-            placeholder="https://example.com"
-          />
-        </Field>
-      )}
-
-      <Field
-        htmlFor="item-tags"
-        label="Tags"
-        hint="Separated by commas. Tags are stored in lower case."
-      >
-        <Input
-          id="item-tags"
-          value={form.tags}
-          onChange={(event) => onChange("tags", event.target.value)}
-          disabled={disabled}
-          placeholder="react, hooks"
-        />
-      </Field>
-    </div>
-  );
-}
-
-function Field({
-  htmlFor,
-  label,
-  hint,
-  children,
-}: {
-  htmlFor: string;
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <h3 className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -706,7 +575,7 @@ function ItemContent({ detail }: { detail: ItemDetail | null }) {
         {detail.fileSize !== null && (
           <span className="text-muted-foreground">
             {" "}
-            · {formatFileSize(detail.fileSize)}
+            Â· {formatFileSize(detail.fileSize)}
           </span>
         )}
       </p>

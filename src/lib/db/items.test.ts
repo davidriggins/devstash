@@ -8,7 +8,13 @@ import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 vi.mock("@/lib/db/user", () => ({ getCurrentUserId: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
-    item: { findFirst: vi.fn(), update: vi.fn(), deleteMany: vi.fn() },
+    item: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      deleteMany: vi.fn(),
+    },
+    itemType: { findFirst: vi.fn() },
     // The real one runs the callback against a transaction client; handing back
     // the same mock keeps `tx.item.*` pointing at the spies asserted on below
     $transaction: vi.fn(),
@@ -17,7 +23,11 @@ vi.mock("@/lib/prisma", () => ({
 
 const { getCurrentUserId } = await import("@/lib/db/user");
 const { prisma } = await import("@/lib/prisma");
-const { deleteItem, getItemById, updateItem } = await import("@/lib/db/items");
+const { createItem, deleteItem, getItemById, updateItem } = await import(
+  "@/lib/db/items"
+);
+
+type CreateItemInput = Parameters<typeof createItem>[0];
 
 /**
  * Untyped on purpose. `findFirst`'s own signature promises the full `Item`
@@ -26,8 +36,10 @@ const { deleteItem, getItemById, updateItem } = await import("@/lib/db/items");
  * would mean listing columns this function never asks for.
  */
 const findFirst = prisma.item.findFirst as unknown as Mock;
+const create = prisma.item.create as unknown as Mock;
 const update = prisma.item.update as unknown as Mock;
 const deleteMany = prisma.item.deleteMany as unknown as Mock;
+const findItemType = prisma.itemType.findFirst as unknown as Mock;
 const transaction = prisma.$transaction as unknown as Mock;
 
 const USER_ID = "user_1";
@@ -57,8 +69,10 @@ function itemRecord(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.mocked(getCurrentUserId).mockReset().mockResolvedValue(USER_ID);
   findFirst.mockReset().mockResolvedValue(itemRecord());
+  create.mockReset().mockResolvedValue(itemRecord());
   update.mockReset().mockResolvedValue(itemRecord());
   deleteMany.mockReset().mockResolvedValue({ count: 1 });
+  findItemType.mockReset().mockResolvedValue({ id: "type_snippet" });
   transaction.mockReset().mockImplementation((run: (tx: unknown) => unknown) =>
     run(prisma)
   );
@@ -133,6 +147,156 @@ describe("getItemById", () => {
     const args = findFirst.mock.calls[0][0];
     expect(args?.select).toHaveProperty("collections");
     expect(args?.select).toHaveProperty("content");
+  });
+});
+
+/** Typed, so the fixture cannot drift from what the schema actually produces */
+function newItem(overrides: Partial<CreateItemInput> = {}): CreateItemInput {
+  return {
+    type: "snippet",
+    title: "useAuth hook",
+    description: "Custom authentication hook",
+    content: "export function useAuth() {}",
+    language: "typescript",
+    url: "https://example.com",
+    tags: ["react", "auth"],
+    ...overrides,
+  };
+}
+
+/** The `data` argument of the single `item.create` call */
+function createData() {
+  return create.mock.calls[0][0].data;
+}
+
+describe("createItem", () => {
+  it("returns null without touching the database when nobody is signed in", async () => {
+    vi.mocked(getCurrentUserId).mockResolvedValue(null);
+
+    expect(await createItem(newItem())).toBeNull();
+    expect(findItemType).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `isSystem` is not decoration. Type names are unique per `(name, userId)`,
+   * so a user could own a custom type also called "snippet", and a create must
+   * not silently land on it.
+   */
+  it("resolves the type against the system types only", async () => {
+    await createItem(newItem());
+
+    expect(findItemType).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { name: "snippet", isSystem: true } })
+    );
+  });
+
+  it("writes the item against the signed-in user and the resolved type", async () => {
+    findItemType.mockResolvedValue({ id: "type_abc" });
+
+    await createItem(newItem());
+
+    expect(createData()).toMatchObject({
+      userId: USER_ID,
+      itemTypeId: "type_abc",
+      title: "useAuth hook",
+      description: "Custom authentication hook",
+    });
+  });
+
+  /** A missing seed is a server problem, not a user one — but it must not write */
+  it("returns null without writing when the system type row is missing", async () => {
+    findItemType.mockResolvedValue(null);
+
+    expect(await createItem(newItem())).toBeNull();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `contentType` is a required enum that the schema does not tie to the type
+   * row — nothing at the database level stops a snippet being stored as `URL`.
+   * Deriving it here is the only thing keeping the two agreed, so every type is
+   * pinned rather than a sample of them.
+   */
+  it("derives contentType from the type rather than the caller", async () => {
+    const cases = [
+      { type: "snippet", contentType: "TEXT" },
+      { type: "prompt", contentType: "TEXT" },
+      { type: "command", contentType: "TEXT" },
+      { type: "note", contentType: "TEXT" },
+      { type: "link", contentType: "URL" },
+    ] as const;
+
+    for (const { type, contentType } of cases) {
+      create.mockClear();
+
+      await createItem(newItem({ type }));
+
+      expect(createData().contentType).toBe(contentType);
+    }
+  });
+
+  /**
+   * The same gate the update write applies, against the same table. The dialog
+   * sends every field whatever type is selected, so this is what stops a link
+   * carrying `content` and a snippet setting a `url`.
+   */
+  it("writes only the columns the chosen type owns", async () => {
+    const cases = [
+      { type: "snippet", writes: ["content", "language"], ignores: ["url"] },
+      { type: "prompt", writes: ["content"], ignores: ["url", "language"] },
+      { type: "command", writes: ["content", "language"], ignores: ["url"] },
+      { type: "note", writes: ["content"], ignores: ["url", "language"] },
+      { type: "link", writes: ["url"], ignores: ["content", "language"] },
+    ] as const;
+
+    for (const { type, writes, ignores } of cases) {
+      create.mockClear();
+
+      await createItem(newItem({ type }));
+
+      for (const field of writes) {
+        expect(createData()).toHaveProperty(field);
+      }
+
+      for (const field of ignores) {
+        expect(createData()).not.toHaveProperty(field);
+      }
+    }
+  });
+
+  /**
+   * No `set: []` here, unlike the update — there is nothing to replace. A name
+   * another user already introduced is connected, never duplicated, because
+   * `Tag.name` is unique globally.
+   */
+  it("connects or creates the tags", async () => {
+    await createItem(newItem());
+
+    expect(createData().tags).toEqual({
+      connectOrCreate: [
+        { where: { name: "react" }, create: { name: "react" } },
+        { where: { name: "auth" }, create: { name: "auth" } },
+      ],
+    });
+  });
+
+  it("writes an empty tag list without complaint", async () => {
+    await createItem(newItem({ tags: [] }));
+
+    expect(createData().tags).toEqual({ connectOrCreate: [] });
+  });
+
+  it("returns the new record flattened as an ItemDetail", async () => {
+    create.mockResolvedValue(itemRecord({ tags: [{ name: "react" }] }));
+
+    const created = await createItem(newItem());
+
+    expect(created?.id).toBe("item_1");
+    expect(created?.tags).toEqual(["react"]);
+    expect(created?.collections).toEqual([
+      { id: "col_1", name: "React Patterns" },
+    ]);
   });
 });
 
